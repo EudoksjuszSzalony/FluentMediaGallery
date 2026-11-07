@@ -48,3 +48,12 @@ The new source supports a compact dark standalone viewer titlebar, default Fit-t
 Gallery changes: adjustable sidebar width, right-hand folder expand chevrons, remembered per-folder sort/layout settings (including classification and favorite ordering), endless incremental batches of 100 records instead of visible pagination, a preliminary vertical date/rating scrubber, and the new justified image-proportional **Rzeka** view (photo dimensions read only for loaded batches). `System.Drawing` thumbnail generation remains 320 px; no 800 px tier exists. Date taken/EXIF is not yet a sort key. A truly memory-bounded virtual source and optimized scrubber/river remain future work.
 
 **Important:** previous WinUI build and UI screenshots at b7cfbbd PASS on Dominator. The changes in THIS batch are committed but **NOT YET BUILT OR VERIFIED**, and may require targeted compile fixes.
+
+
+## 2026-11-07: Viewer crash and Photos-like UI refinements (source on develop, pending verification)
+
+Following a repeatable Dominator runtime exception (WinUI ScrollViewer rejects MinZoomFactor below 0.1), the viewer was changed to use only allowed zoom factors 0.1–10, with a half-sized layout image mapping displayed 5–500% and deferred fit after layout. Build/runtime verification is still required.
+
+The new viewer top bar puts favorites, filmstrip and optional Details next to the native caption controls. Only the separate ViewerWindow displays details on demand; the main gallery details column is hidden. Filmstrip selection uses a thin outline rather than a filled selected item. The gallery has its own dark action titlebar, a grouped sort flyout (field + direction), responsive square tile widths and improved date-grouped Rzeka rows without oversized panorama strips. This remains an approximation of Windows Photos styling, not a complete UI parity claim.
+
+**Status:** committed to `develop`; static XAML/handler checks pass; the newest stage is **NOT yet built or tested on Dominator**. Do not mass-index original media yet or test System.Rating writes except on copies.

@@ -1,6 +1,6 @@
 # FluentMediaGallery — HANDOFF
 
-**Last handoff update:** 2026-11-07 — gallery sort/Rzeka/zoom improvements. Latest status at the END of this file takes precedence over older historical notes. Read this file and AGENTS.md at the start of EVERY chat, and update both when a decision changes. This is a living status/history file. Do not claim unrun tests passed.
+**Last handoff update:** 2026-11-07 — viewer crash/Photos-like layout hotfix. Read the newest section at END; older sections describe historical state. Read this file and AGENTS.md at the start of EVERY chat, and update both when a decision changes. This is a living status/history file. Do not claim unrun tests passed.
 
 ## Repository and working environment
 
@@ -150,3 +150,30 @@ NEXT STEPS:
 2. On a small copied-media folder, verify separate viewer: initial FIT, maximization resize, 100% vs fit, slider/keyboard smooth steps, thin selected indicator, filmstrip not blinking, no hover flash, black custom titlebar. Verify sidebar drag, chevrons/vertical centering.
 3. Verify sorting is remembered independently for CP77, CP77/wallpapers, All Media and Favorites; verify favorites/rating ordering, scrollbar date and 0–5★ labels, Rzeka aspect/rows, automatic append near scroll bottom, and no visible pagination.
 4. Before mass-indexing 201k media: virtual data window/async source thumbnails at >100k, true full-res photo zoom, actual EXIF creation/capture timestamps, efficient river reflow and date scrubber groups. Add video playback and incremental SMB watcher/reconciliation. Do not use Actions on regular commits.
+
+## 2026-11-07 ~04:52–05:XX Europe/Warsaw — Dominator new UI PASS build, repeatable zoom crash; source fixes committed (unverified)
+
+### User-provided evidence / needs
+
+- User supplied screenshots of the develop version at `d46e037` on **Dominator**: main WinUI gallery shows "Rzeka" rows and "Kwadrat"; per-folder sort appears persisted; photos opened in separate ViewerWindow. Previous user logs show build/smoke PASS for earlier version, but no fresh build log was supplied for this exact revision. Treat screenshots as **visible UI evidence** rather than claiming exact compilation results.
+- **Repeatable runtime exception on image open / window maximization:** "The MinZoomFactor property cannot be set to a value smaller than 0.1." This was directly caused by `ViewerWindow.xaml.cs` assigning `ZoomScroll.MinZoomFactor = 0.05f` in `RecalculateFit()`. Users saw partial black screen, then window/application termination. **Root cause verified from source and error message.**
+- User wants UI closer to Windows Photos: remove details pane from Gallery, show Details only when clicking a button in photo Viewer; titlebar icon/actions (favorites, filmstrip) next to system minimize/maximize/close in BOTH windows; sort menu with field group (modified/created/name/rating/favorites) followed by "Ascending/Descending"; square layout filling available gallery width; filmstrip selection outlined around full thumbnail, no left blue bar; improve date-grouped "Rzeka" without giant stretched stripes.
+
+### Actual develop source commits implemented — NOT YET rebuilt/tested on Dominator
+
+- `9e961ef` and `0734a9d`: fix crashing MinZoomFactor. Viewer ScrollViewer now has valid Min 0.1 / Max 10 in XAML, no code path sets invalid 0.05. Internal layout image uses 0.5x decoded-pixel dimensions, so UI percentages 5–500 correspond to supported ScrollViewer factors 0.1–10. Maintains separate fit-to-window percentage with pixel scale. This is a source-level fix, runtime validation PENDING.
+- `7750037`: compact ViewerWindow chrome. Favoriting (L), Filmstrip (F), Details toggle controls are in top custom bar before reserved native caption buttons. Separate on-demand viewer DetailsPane overlays photo surface (file name, type, size, Windows rating, path); default Collapsed; main gallery metadata writes unchanged. Filmstrip selected row gets a full blue Border instead of a thin left strip. Initial zoom percent uses placeholder until image decoding completes.
+- `06a774f`: MainWindow dark custom titlebar with Favorites toggle and add-folder button before native caption; old right-hand Details panel made Collapsed and column Width=0, so no right-side space. Sort UI changed from one flat ComboBox to MenuFlyout first listing Modyfikacja/Utworzenie/Nazwa/Klasyfikacja/Ulubione, then separator + Rosnąco/Malejąco. Existing per-view saved `_sortKey` preserved; title shows selection and arrow. Square gallery tile panel dynamically calculates ItemWidth on resize; fixed-width border and image removed so tiles fill row. Legacy hidden detail controls and old in-main viewer remain in XAML/code to avoid breaking existing references and can be cleaned later.
+- `9bdae49`: Rzeka rows target ~202 DIP, height clamp 145–240, source photo aspect ratio clamp 0.65–2.8 to prevent ultra-wide logos collapsing row height, date groups cannot mix within a row. Empty repeated date headers collapsed; reduced double spacing; `SameRiverRow` diffing preserves unchanged row controls and thumbnails on append/resize instead of clearing whole ListView. This is closer to Photos but not pixel-identical and NOT verified on Dominator.
+- `a04352a`: after image decode, schedule a low-priority fit recalculation once layout is ready, avoiding first-image appearing tiny due to ChangeView before measurement. Added `FavoriteRatingPolicy.ToStars` and smoke assertions: Windows raw 75 displays **4★** (previous viewer formula incorrectly showed 3★), 99=5★, 1=1★.
+- `2595149`: bottom filmstrip has ListView selection disabled, `IsItemClickEnabled` with click handler, compact item-container padding and a single custom selection outline via `MediaRow.SelectionOpacity`. Avoid default selected background/highlight interfering with user's request.
+- No dependency changes or GitHub Actions added. No changes to original photos, video files, caches, SQLite library or backups during code commits.
+
+### Validation and limitations
+
+- Static source check on latest `2595149`: MainWindow.xaml + ViewerWindow.xaml balanced tags PASS, no duplicate x:Name, all **43** MainWindow events and **26** ViewerWindow events have C# handlers, no dangling `SortBox` usage, original invalid zoom bound absent. This does NOT mean WinUI XAML compiler/build/runtime passes.
+- **Latest source has NOT been built or tested on Dominator.** User must run `scripts/Build-WinUIPreview.ps1` from clean USER PowerShell with all app windows closed, then Core.Smoke (new star mapping tests), launch and test.
+- Primary gate: open photo, verify displayed zoom %, maximize and restore 2–3 times without crash or black frame, 100% vs fit, scroll/zoom slider. Test photos with very different resolutions, incl. portrait and landscape.
+- UI gates: gallery has no right-hand Details pane, Viewer Details button toggles on demand, both top bars dark with buttons next to native controls, sort menu fields/directions and persistence, square layout width resizes, Rzeka grouping/row widths, selected filmstrip picture outlined ONLY. Also navigate while filmstrip open; no flicker expected within SQLite page.
+- Known unfinished work: actual Windows Photos visual fidelity/animations still incomplete; true EXIF DateTaken, advanced Rzeka masonry/timeline scrubber, finite-memory virtualized scrolling for >201k, true full-resolution 1:1 tiled decoding beyond viewer 3840px cap, video playback, offline SMB incremental reconciliation. Legacy hidden viewer and details code should be removed after successful Dominator validation.
+- All changes on sole `develop`; `main` unchanged. No deletion/cleanup performed. Test favorites metadata writes **only on COPY media**; file write success still unverified by user.
