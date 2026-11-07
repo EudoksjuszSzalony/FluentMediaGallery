@@ -121,3 +121,9 @@ NEXT STEPS:
 2. Verify gallery remains open and second OS window appears; navigate boundary of 100-row page; test Ctrl+Numpad +/-, L, F, wheel, Esc, zoom slider, right-click menu, fade arrow hotspots. Test metadata writes ONLY on media COPIES.
 3. Expand CP77 subdirectories in left sidebar; use folder-plus picker; add an already indexed child as shortcut and confirm no duplicate source/media. Test on an offline source separately.
 4. After PASS, remove legacy overlay code and implement selectable/persisted sorting, polished animations, video playback and robust large-library indexing.
+
+## Final check for this implementation batch
+
+- Latest implementation fix commit 0a34b837: guard early ZoomScroll.ViewChanged callbacks before ViewerWindow initialization.
+- Static XAML tag-balance validation PASS for MainWindow.xaml and ViewerWindow.xaml. Every declared XAML handler in both windows is found in corresponding C# sources. All named ViewerWindow controls are referenced in code. Core source contains folder/shortcut SQLite schema and tests. These checks do NOT establish that WinUI XAML compiler or GUI will pass on Dominator.
+- User-run test remains pending. Test .NET Core.Smoke for new shortcut queries and build the WinUI Release x64. Avoid triggering GitHub Actions, avoid deleting bin/obj. Close previous running FluentMediaGallery before using scripts/Build-WinUIPreview.ps1 -Start.
