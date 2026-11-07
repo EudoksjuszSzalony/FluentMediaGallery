@@ -201,32 +201,51 @@
                     </DataTemplate>
                 </GridView.ItemTemplate>
             </GridView>
-            <!-- First mosaic/Rzeka variant: wider edge-to-edge image tiles. -->
-            <GridView Grid.Column="0" x:Name="RiverItems"
+            <!-- Justified rows with widths derived from original media aspect ratio. -->
+            <ListView Grid.Column="0" x:Name="RiverItems"
                       Visibility="Collapsed" Loaded="RiverItems_Loaded"
-                      SelectionMode="None" IsItemClickEnabled="True"
-                      ItemClick="MediaItems_ItemClick"
-                      ContainerContentChanging="MediaItems_ContainerContentChanging"
+                      SizeChanged="RiverItems_SizeChanged"
+                      ContainerContentChanging="RiverItems_ContainerContentChanging"
+                      SelectionMode="None"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                <GridView.ItemsPanel>
+                <ListView.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <ItemsWrapGrid Orientation="Horizontal" ItemWidth="282" ItemHeight="181"/>
+                        <ItemsStackPanel Orientation="Vertical"/>
                     </ItemsPanelTemplate>
-                </GridView.ItemsPanel>
-                <GridView.ItemTemplate>
+                </ListView.ItemsPanel>
+                <ListView.ItemTemplate>
                     <DataTemplate>
-                        <Grid Width="278" Height="178" Background="#292C2F">
-                            <Image Source="{Binding Thumbnail}" Width="278" Height="178"
-                                   Stretch="UniformToFill"/>
-                            <TextBlock Text="{Binding Heart}" FontSize="21" Foreground="IndianRed"
-                                       HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"/>
-                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="11"
-                                       VerticalAlignment="Bottom" Padding="6,4" Foreground="White"
-                                       Background="#99000000"/>
-                        </Grid>
+                        <StackPanel Spacing="4" Margin="0,0,0,5">
+                            <TextBlock Text="{Binding Header}" FontWeight="SemiBold" FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Margin="3,6,0,3"/>
+                            <ItemsControl ItemsSource="{Binding Tiles}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Click="RiverTile_Click" Tag="{Binding Media}"
+                                                Width="{Binding Width}" Height="{Binding Height}"
+                                                Margin="0,0,3,0" Padding="0" BorderThickness="0"
+                                                Background="Transparent">
+                                            <Grid Width="{Binding ImageWidth}" Height="{Binding ImageHeight}"
+                                                  Background="#26292C">
+                                                <Image Source="{Binding Media.Thumbnail}" Stretch="UniformToFill"/>
+                                                <TextBlock Text="{Binding Media.Heart}"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                           FontSize="19" Foreground="IndianRed" Margin="4"/>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </DataTemplate>
-                </GridView.ItemTemplate>
-            </GridView>
+                </ListView.ItemTemplate>
+            </ListView>
             <!-- Scrubber moves by indexed offset; the displayed label depends on sort mode. -->
             <StackPanel Grid.Column="1" Spacing="5" HorizontalAlignment="Stretch">
                 <TextBlock x:Name="TimelineHeader" Text="Data" FontSize="11"
