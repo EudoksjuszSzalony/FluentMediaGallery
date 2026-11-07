@@ -81,3 +81,11 @@ Free public Windows 11 Fluent Photos-like gallery, with native WinUI 3 UI, photo
 - Thumbnail cache adds dependency `System.Drawing.Common 10.0.12` **for Windows-only GDI+ HBITMAP-to-PNG encoding**. This dependency and the new UI/XAML/code are **NOT COMPILED OR TESTED on Dominator**. Run restore, vulnerability audit, build and GUI rendering; fix errors in develop if any.
 - Cache only writes generated PNGs under user LocalAppData, NEVER original media. Source registration still requires manual user action; no automatic full scan.
 - There is still no photo viewer, bottom filmstrip, video player or incremental watchers.
+
+## 2026-11-07 03:22 Europe/Warsaw — thumbnail build blocked by running app
+
+- User Dominator log at develop c8f077bd: Git branch/status/pull PASS, restore PASS, NuGet audit PASS with no vulnerable packages.
+- App build FAILED because old FluentMediaGallery.App process PID 62700 held destination FluentMediaGallery.Core.dll open. MSBuild warnings MSB3026, errors MSB3027 and MSB3021. Core compiled; new thumbnail code is NOT YET verified by compilation. This is a file lock, not evidence of a source error.
+- Close the existing gallery **normally** first; do not force-kill during scan/metadata writes. No clean of bin/obj or SDK reinstall is indicated.
+- Added scripts/Build-WinUIPreview.ps1: requires clean develop checkout, pulls fast-forward, checks for running app BEFORE build, builds Release x64, optional -Start launches preview. Does not kill processes or delete files.
+- NEXT: user closes preview app, runs the fail-fast helper via USER PowerShell, reports outcome. If build succeeds test visible UI and actual thumbnails on a small COPY-only media folder. No full 201k scan, no repeated Core smoke test required.

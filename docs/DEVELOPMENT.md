@@ -15,3 +15,9 @@ After pulling develop, validate restore, compile, vulnerable dependencies, and s
 Scripts/Cleanup-DevelopmentArtifacts.ps1 lists only disposable per-project bin, obj, TestResults directories under src/ and tests/. Default is **preview only**. Run -Apply explicitly only if you have reviewed the list. Do not run while a build or test process is executing.
 
 Clean artifacts only when genuinely obsolete or space is needed. Repeatedly deleting obj/bin harms incremental build speed. This script never touches media, database, thumbnail cache, backups, source code, Git history or release assets.
+
+## WinUI build and running preview
+
+Close FluentMediaGallery before each build. A running instance locks FluentMediaGallery.Core.dll and causes MSB3026/MSB3027/MSB3021. Do not clean or reinstall SDK for file locks.
+
+Use scripts/Build-WinUIPreview.ps1 from a USER PowerShell session. It checks Git status, pulls develop, then checks that no FluentMediaGallery.App.exe is running BEFORE invoking dotnet. Optional -Start launches the UI. It deliberately never force-stops an existing process, since that process could be indexing or writing metadata.
