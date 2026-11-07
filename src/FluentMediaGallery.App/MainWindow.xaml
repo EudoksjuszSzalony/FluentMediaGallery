@@ -247,16 +247,27 @@
                 </ListView.ItemTemplate>
             </ListView>
             <!-- Scrubber moves by indexed offset; the displayed label depends on sort mode. -->
-            <StackPanel Grid.Column="1" Spacing="5" HorizontalAlignment="Stretch">
-                <TextBlock x:Name="TimelineHeader" Text="Data" FontSize="11"
-                           TextAlignment="Center"/>
-                <Slider x:Name="TimelineSlider" Minimum="0" Maximum="100" Value="0"
-                        Orientation="Vertical" VerticalAlignment="Stretch" Height="290"
+            <Grid Grid.Column="1" RowSpacing="5">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="TimelineHeader" Grid.Row="0" Text="Data"
+                           FontSize="11" TextAlignment="Center"/>
+                <TextBlock x:Name="TimelineTop" Grid.Row="1" Text="—"
+                           FontSize="10" TextAlignment="Center"/>
+                <Slider x:Name="TimelineSlider" Grid.Row="2" Minimum="0" Maximum="100" Value="0"
+                        Orientation="Vertical" VerticalAlignment="Stretch"
                         PointerReleased="TimelineSlider_PointerReleased"
                         ValueChanged="TimelineSlider_ValueChanged"/>
-                <TextBlock x:Name="TimelineValue" Text="—" TextAlignment="Center"
+                <TextBlock x:Name="TimelineBottom" Grid.Row="3" Text="—"
+                           FontSize="10" TextAlignment="Center"/>
+                <TextBlock x:Name="TimelineValue" Grid.Row="4" Text="—" TextAlignment="Center"
                            FontSize="10" TextWrapping="Wrap"/>
-            </StackPanel>
+            </Grid>
             </Grid>
             <TextBlock Grid.Row="4" x:Name="PageLabel" Margin="3,7,0,0"
                        FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>

@@ -31,6 +31,11 @@ try
     var scan = await scanner.ScanAsync(source);
     Check(scan.Completed && scan.Discovered == 2, "initial scan stores photo and video");
     Check(await database.CountMediaAsync() == 2, "two indexed media");
+    var range = await database.GetDateRangeAsync(sourceId: source.Id);
+    Check(range.Maximum >= range.Minimum && range.Maximum > 0,
+        "gallery timeline range comes from indexed dates");
+    Check((await database.GetDateRangeAsync(sourceId: -123)).Maximum == 0,
+        "empty gallery timeline reports no dates");
     Check((await database.GetPendingRatingsAsync(sourceId: source.Id)).Count == 2,
         "source-scoped pending rating import includes both files");
     Check((await database.GetPendingRatingsAsync(sourceId: -999)).Count == 0,

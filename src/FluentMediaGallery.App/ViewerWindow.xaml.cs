@@ -375,6 +375,17 @@ public sealed partial class ViewerWindow : Window
             Status.Text = result.StoredInFile ? "System.Rating zapisany i zweryfikowany."
                 : "Ulubione zapisano w SQLite, zapis do pliku nie powiódł się: " + result.Error;
             _onFavoriteChanged();
+            var changed = await _database.GetByIdAsync(entry.Id);
+            if (changed is not null)
+            {
+                var row = _currentPage.FirstOrDefault(x => x.Entry.Id == changed.Id);
+                row?.UpdateEntry(changed);
+            }
+
+            // Removing a favorite from favorites-only or favorite ordering changes
+            // the sequence; only then do we refresh the current filmstrip page.
+            if (_context.FavoritesOnly || _context.SortKey.StartsWith("favorites", StringComparison.Ordinal))
+                _loadedPageStart = -1;
 
             _total = await _database.CountFilteredAsync(_context.SourceId, _context.FavoritesOnly,
                 _context.Search, folderPath: _context.FolderPath);

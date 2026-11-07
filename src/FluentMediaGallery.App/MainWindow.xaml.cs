@@ -41,6 +41,8 @@ public sealed partial class MainWindow : Window
     private bool _loadingMore;
     private bool _resizingSidebar;
     private bool _updatingTimeline;
+    private long _timelineMinTicks;
+    private long _timelineMaxTicks;
     private readonly HashSet<ScrollViewer> _trackedGalleryScrolls = new();
     private int _queryVersion;
     private bool _isReady;
@@ -225,6 +227,14 @@ public sealed partial class MainWindow : Window
             if (version != _queryVersion) return;
 
             _matchedCount = count;
+            if (TimelineHeader is not null)
+            {
+                var date = await _database.GetDateRangeAsync(_selectedSourceId, favorites,
+                    search, _selectedFolderPath, _sortKey.StartsWith("created", StringComparison.Ordinal));
+                if (version != _queryVersion) return;
+                _timelineMinTicks = date.Minimum;
+                _timelineMaxTicks = date.Maximum;
+            }
             _windowStartOffset = nextOffset;
             _currentPage = nextOffset / PageSize;
             _rows.Clear();
@@ -249,14 +259,32 @@ public sealed partial class MainWindow : Window
         TimelineHeader.Text = _sortKey.StartsWith("rating", StringComparison.Ordinal) ||
                               _sortKey.StartsWith("favorites", StringComparison.Ordinal)
             ? "★" : _sortKey.StartsWith("name", StringComparison.Ordinal) ? "A–Z" : "Data";
-        if (_rows.Count > 0)
+        var ascending = _sortKey.EndsWith("-asc", StringComparison.Ordinal);
+        if (TimelineHeader.Text == "Data" && _timelineMaxTicks > 0)
         {
-            var first = _rows[0].Entry;
-            TimelineValue.Text = TimelineHeader.Text == "Data"
-                ? new DateTime(first.LastWriteUtcTicks, DateTimeKind.Utc).ToLocalTime().ToString("yyyy")
-                : TimelineHeader.Text;
+            TimelineTop.Text = new DateTime(ascending ? _timelineMinTicks : _timelineMaxTicks,
+                DateTimeKind.Utc).ToLocalTime().ToString("yyyy");
+            TimelineBottom.Text = new DateTime(ascending ? _timelineMaxTicks : _timelineMinTicks,
+                DateTimeKind.Utc).ToLocalTime().ToString("yyyy");
         }
-        else TimelineValue.Text = "—";
+        else if (TimelineHeader.Text == "★")
+        {
+            TimelineTop.Text = _sortKey.StartsWith("favorites", StringComparison.Ordinal)
+                ? (ascending ? "—" : "♥") : (ascending ? "0★" : "5★");
+            TimelineBottom.Text = _sortKey.StartsWith("favorites", StringComparison.Ordinal)
+                ? (ascending ? "♥" : "—") : (ascending ? "5★" : "0★");
+        }
+        else
+        {
+            TimelineTop.Text = ascending ? "A" : "Z";
+            TimelineBottom.Text = ascending ? "Z" : "A";
+        }
+        TimelineValue.Text = TimelineHeader.Text == "Data" && _rows.Count > 0
+            ? new DateTime((_sortKey.StartsWith("created", StringComparison.Ordinal) &&
+                _rows[0].Entry.CreatedUtcTicks > 0) ? _rows[0].Entry.CreatedUtcTicks :
+                _rows[0].Entry.LastWriteUtcTicks, DateTimeKind.Utc)
+                .ToLocalTime().ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("pl-PL"))
+            : TimelineHeader.Text;
         _updatingTimeline = true;
         try
         {
@@ -343,9 +371,23 @@ public sealed partial class MainWindow : Window
         Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         if (!_isReady || _updatingTimeline) return;
-        TimelineValue.Text = TimelineHeader.Text == "★"
-            ? $"{Math.Clamp(5 - (int)Math.Round(e.NewValue / 20d), 0, 5)}★"
-            : $"{e.NewValue:0}%";
+        if (TimelineHeader.Text == "★")
+        {
+            var ascending = _sortKey.EndsWith("-asc", StringComparison.Ordinal);
+            var stars = Math.Clamp((int)Math.Round(e.NewValue / 20d), 0, 5);
+            TimelineValue.Text = $"{(ascending ? stars : 5 - stars)}★";
+        }
+        else if (TimelineHeader.Text == "Data" && _timelineMaxTicks > _timelineMinTicks)
+        {
+            var fraction = e.NewValue / 100d;
+            var ticks = _sortKey.EndsWith("-asc", StringComparison.Ordinal)
+                ? _timelineMinTicks + (long)((_timelineMaxTicks - _timelineMinTicks) * fraction)
+                : _timelineMaxTicks - (long)((_timelineMaxTicks - _timelineMinTicks) * fraction);
+            TimelineValue.Text = new DateTime(ticks, DateTimeKind.Utc)
+                .ToLocalTime().ToString("MMM yyyy",
+                System.Globalization.CultureInfo.GetCultureInfo("pl-PL"));
+        }
+        else TimelineValue.Text = $"{e.NewValue:0}%";
     }
 
     private async void TimelineSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
