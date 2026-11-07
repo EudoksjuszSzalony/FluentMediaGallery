@@ -27,6 +27,16 @@ public sealed class MediaRow : INotifyPropertyChanged
 {
     private bool _loadingStarted;
     private BitmapImage? _thumbnail;
+    private readonly CancellationTokenSource _thumbnailCancellation = new();
+
+    // Called when this media row leaves the bounded visible-query window.
+    // Cancels queued Shell thumbnail work and releases our decoded bitmap.
+    public void ReleaseThumbnail()
+    {
+        if (!_thumbnailCancellation.IsCancellationRequested)
+            _thumbnailCancellation.Cancel();
+        Thumbnail = null;
+    }
 
     private double _selectionOpacity;
     public double SelectionOpacity => _selectionOpacity;
@@ -74,19 +84,22 @@ public sealed class MediaRow : INotifyPropertyChanged
         _loadingStarted = true;
         try
         {
-            var path = await cache.GetOrCreateAsync(Entry);
-            if (path is null) return;
+            var ct = _thumbnailCancellation.Token;
+            var path = await cache.GetOrCreateAsync(Entry, ct);
+            if (path is null || ct.IsCancellationRequested) return;
 
             // BitmapImage is a XAML object: create and update it only on the UI thread.
             dispatcher.TryEnqueue(async () =>
             {
                 try
                 {
+                    if (ct.IsCancellationRequested) return;
                     var file = await StorageFile.GetFileFromPathAsync(path);
                     using var stream = await file.OpenReadAsync();
                     var image = new BitmapImage();
                     await image.SetSourceAsync(stream);
-                    Thumbnail = image;
+                    if (!ct.IsCancellationRequested)
+                        Thumbnail = image;
                 }
                 catch (Exception ex) when (
                     ex is IOException or UnauthorizedAccessException or ArgumentException
@@ -95,6 +108,10 @@ public sealed class MediaRow : INotifyPropertyChanged
                     // Keep the placeholder when a thumbnail is unavailable.
                 }
             });
+        }
+        catch (OperationCanceledException)
+        {
+            // Media left the gallery window while queued for thumbnail extraction.
         }
         catch (Exception ex) when (
             ex is IOException or UnauthorizedAccessException

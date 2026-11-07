@@ -310,6 +310,7 @@ public sealed partial class MainWindow : Window
             _windowStartOffset = nextOffset;
             _currentPage = nextOffset / PageSize;
             _suppressScrollPaging = true;
+            foreach (var staleRow in _rows) staleRow.ReleaseThumbnail();
             _rows.Clear();
             foreach (var item in items) _rows.Add(new MediaRow(item));
             UpdateGalleryProgress();
@@ -451,7 +452,12 @@ public sealed partial class MainWindow : Window
                 GalleryWindowPolicy.TrimExcess(_rows.Count, items.Count));
             var removedHeight = ApproximateTopHeight(prune);
             foreach (var item in items) _rows.Add(new MediaRow(item));
-            for (var i = 0; i < prune; i++) _rows.RemoveAt(0);
+            for (var i = 0; i < prune; i++)
+            {
+                var evicted = _rows[0];
+                _rows.RemoveAt(0);
+                evicted.ReleaseThumbnail();
+            }
             _windowStartOffset += prune;
 
             await RebuildRiverAsync();
@@ -493,7 +499,12 @@ public sealed partial class MainWindow : Window
                 _rows.Insert(0, new MediaRow(items[i]));
             _windowStartOffset = previous;
             for (var i = 0; i < prune; i++)
-                _rows.RemoveAt(_rows.Count - 1);
+            {
+                var index = _rows.Count - 1;
+                var evicted = _rows[index];
+                _rows.RemoveAt(index);
+                evicted.ReleaseThumbnail();
+            }
 
             await RebuildRiverAsync();
             if (version != _queryVersion) return;
