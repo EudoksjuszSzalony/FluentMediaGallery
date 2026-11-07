@@ -187,5 +187,94 @@
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </StackPanel>
         </Border>
+    
+        <!-- In-window photo viewer. Nothing is loaded until a tile is opened. -->
+        <Grid x:Name="ViewerOverlay" Grid.ColumnSpan="3" Visibility="Collapsed"
+              Background="#111315">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="62"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="122"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Padding="16,10" Background="#202226">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" x:Name="ViewerCloseButton"
+                        Content="← Galeria" Click="ViewerClose_Click"
+                        Margin="0,0,16,0"/>
+                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                    <TextBlock x:Name="ViewerFileName" Text="Podgląd zdjęcia"
+                               FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis"
+                               Foreground="White"/>
+                    <TextBlock x:Name="ViewerPosition" Text=""
+                               FontSize="11" Foreground="#BBC5CC"/>
+                </StackPanel>
+                <Button Grid.Column="2" x:Name="ViewerFavoriteButton"
+                        Content="♡ Dodaj do ulubionych" Click="ViewerFavorite_Click"
+                        Margin="0,0,10,0"/>
+                <Button Grid.Column="3" Content="Zamknij (Esc)" Click="ViewerClose_Click"/>
+            </Grid>
+
+            <Grid Grid.Row="1" Padding="15,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="58"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="58"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" x:Name="ViewerPreviousButton"
+                        Content="❮" Click="ViewerPrevious_Click"
+                        FontSize="22" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                        Margin="0,0,8,0"/>
+                <Grid Grid.Column="1">
+                    <Image x:Name="ViewerImage" Stretch="Uniform"
+                           HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <ProgressRing x:Name="ViewerLoading" IsActive="False" Width="48" Height="48"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ViewerStatus" Text="" Foreground="#E8E8E8"
+                               FontSize="12" TextWrapping="Wrap"
+                               TextAlignment="Center" MaxWidth="720"
+                               HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                               Margin="16,0,16,14"/>
+                </Grid>
+                <Button Grid.Column="2" x:Name="ViewerNextButton"
+                        Content="❯" Click="ViewerNext_Click"
+                        FontSize="22" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                        Margin="8,0,0,0"/>
+            </Grid>
+
+            <Border Grid.Row="2" Background="#202226" Padding="10,8">
+                <!-- Filmstrip reuses thumbnails in the current 100-row SQLite page. -->
+                <ListView x:Name="ViewerFilmstrip" Height="100"
+                          SelectionMode="Single"
+                          SelectionChanged="ViewerFilmstrip_SelectionChanged"
+                          ContainerContentChanging="ViewerFilmstrip_ContainerContentChanging"
+                          ScrollViewer.HorizontalScrollMode="Enabled"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsStackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Width="103" Height="80" Margin="2">
+                                <Border Background="#32353A" CornerRadius="5"/>
+                                <Image Source="{Binding Thumbnail}" Width="100" Height="77"
+                                       Stretch="UniformToFill"/>
+                                <TextBlock Text="{Binding TypeMark}" FontSize="14"
+                                           VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                                           Foreground="White" Margin="3"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
