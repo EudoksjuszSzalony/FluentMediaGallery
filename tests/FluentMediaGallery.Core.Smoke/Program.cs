@@ -161,6 +161,43 @@ try
     await scanner.ScanAsync(source);
     Check(await database.CountMediaAsync() == 2, "returning offline source reconnects");
     Check((await database.GetPageAsync(0, 100, favoritesOnly: true)).Count == 1, "favorite survives offline and reconnect");
+
+    // A separate read-only fixture for pagination; don't change the favorites
+    // or filesystem scans above. SQLite can index media without opening files.
+    var pagingDb = new LibraryDatabase(Path.Combine(temp, "Paging", "library.sqlite"));
+    await pagingDb.InitializeAsync();
+    var pagingSource = await pagingDb.AddSourceAsync(Path.Combine(temp, "VirtualMedia"));
+    var synthetic = Enumerable.Range(0, 650).Select(i => new MediaFile(
+        Path.Combine(temp, "VirtualMedia", $"{i:0000}.jpg"),
+        $"{i:0000}.jpg", MediaKind.Photo, 200 + i,
+        new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).Ticks + i)).ToArray();
+    await pagingDb.UpsertBatchAsync(pagingSource.Id, 1, synthetic);
+    var head = await pagingDb.GetPageAsync(0, GalleryWindowPolicy.BatchSize);
+    var tail = await pagingDb.GetPageAsync(600, GalleryWindowPolicy.BatchSize);
+    Check(head.Count == 100 && head[0].Name == "0649.jpg",
+        "paged SQLite browsing starts with newest indexed file");
+    Check(tail.Count == 50 && tail[^1].Name == "0000.jpg",
+        "partial last batch returns the final media without duplication");
+    Check((await pagingDb.GetPageAsync(100, 100))[0].Id != head[0].Id,
+        "consecutive pages select distinct indexed media");
+    var retained = 0;
+    var windowStart = 0;
+    for (var loaded = 0; loaded < 650; loaded += GalleryWindowPolicy.BatchSize)
+    {
+        var incoming = Math.Min(GalleryWindowPolicy.BatchSize, 650 - loaded);
+        var prune = Math.Min(retained, GalleryWindowPolicy.TrimExcess(retained, incoming));
+        windowStart += prune;
+        retained += incoming - prune;
+        Check(retained <= GalleryWindowPolicy.MaxRetainedMedia,
+            "gallery window stays within fixed media memory budget");
+    }
+    Check(windowStart == 300 && retained == 350 && windowStart + retained == 650,
+        "forward scrolling keeps an exact continuous absolute offset");
+    var earlier = GalleryWindowPolicy.PreviousBatchOffset(windowStart);
+    Check(earlier == 200 &&
+        (await pagingDb.GetPageAsync(earlier, 100)).Count == 100,
+        "reverse scrolling reloads an evicted SQLite batch");
+
 }
 finally
 {
