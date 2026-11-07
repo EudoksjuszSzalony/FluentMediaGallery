@@ -186,7 +186,13 @@ public sealed partial class MainWindow : Window
         var sample = _rows.ToArray();
         var width = RiverItems.ActualWidth > 300 ? RiverItems.ActualWidth
             : MediaItems.ActualWidth > 300 ? MediaItems.ActualWidth : 1050;
-        var rows = await Task.Run(() => RiverLayout.Build(sample, width));
+        // One range caption for the current filtered gallery, not a new row
+        // for each month (which created isolated oversized logo tiles).
+        var rangeLabel = _timelineMinTicks > 0 && _timelineMaxTicks >= _timelineMinTicks
+            ? $"{new DateTime(_timelineMinTicks, DateTimeKind.Utc).ToLocalTime():d MMMM yyyy} – " +
+              $"{new DateTime(_timelineMaxTicks, DateTimeKind.Utc).ToLocalTime():d MMMM yyyy}"
+            : "";
+        var rows = await Task.Run(() => RiverLayout.Build(sample, width, rangeLabel));
         if (version != _riverGeneration || _layoutKey != "river") return;
         // Preserve completed row visuals, thumbnails and current scroll position.
         // Only a changed final row (or the tail after a resize) is replaced.

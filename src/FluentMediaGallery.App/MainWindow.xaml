@@ -248,11 +248,11 @@
                 </ListView.ItemsPanel>
                 <ListView.ItemTemplate>
                     <DataTemplate>
-                        <StackPanel Spacing="4" Margin="0,0,0,5">
+                        <StackPanel Spacing="0" Margin="0,0,0,4">
                             <TextBlock Text="{Binding Header}" Visibility="{Binding HeaderVisibility}"
                                        FontWeight="SemiBold" FontSize="12"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       Margin="3,6,0,3"/>
+                                       Margin="3,5,0,8"/>
                             <ItemsControl ItemsSource="{Binding Tiles}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
