@@ -51,6 +51,12 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(MainTitleDragRegion);
+        AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        AppWindow.TitleBar.ButtonForegroundColor = Microsoft.UI.Colors.White;
+        AppWindow.TitleBar.ButtonHoverBackgroundColor =
+            Microsoft.UI.ColorHelper.FromArgb(255, 65, 68, 74);
 
         _indexer = new DirectoryIndexer(_database);
         _ratingImporter = new RatingImportService(_database, new ShellRatingReader());
@@ -159,8 +165,7 @@ public sealed partial class MainWindow : Window
         _applyingPreferences = true;
         try
         {
-            SortBox.SelectedItem = SortBox.Items.Cast<ComboBoxItem>()
-                .FirstOrDefault(i => i.Tag?.ToString() == _sortKey);
+            UpdateSortCaption();
             ViewModeBox.SelectedItem = ViewModeBox.Items.Cast<ComboBoxItem>()
                 .FirstOrDefault(i => i.Tag?.ToString() == _layoutKey);
             ApplyLayoutMode();
@@ -328,7 +333,21 @@ public sealed partial class MainWindow : Window
     }
 
     private void MediaItems_Loaded(object sender, RoutedEventArgs e)
-        => TrackScroll(sender as DependencyObject);
+    {
+        TrackScroll(sender as DependencyObject);
+        UpdateSquareTileWidth(MediaItems.ActualWidth);
+    }
+
+    private void MediaItems_SizeChanged(object sender, SizeChangedEventArgs e)
+        => UpdateSquareTileWidth(e.NewSize.Width);
+
+    private void UpdateSquareTileWidth(double width)
+    {
+        if (MediaItems.ItemsPanelRoot is not ItemsWrapGrid grid || width < 180) return;
+        var available = Math.Max(180, width - 16);
+        var count = Math.Max(1, (int)Math.Floor(available / 186));
+        grid.ItemWidth = Math.Floor(available / count);
+    }
     private void RiverItems_Loaded(object sender, RoutedEventArgs e)
         => TrackScroll(sender as DependencyObject);
 
@@ -348,14 +367,50 @@ public sealed partial class MainWindow : Window
             await AppendMoreAsync();
     }
 
-    private async void SortBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void UpdateSortCaption()
     {
-        if (!_isReady || _applyingPreferences ||
-            SortBox.SelectedItem is not ComboBoxItem chosen) return;
-        _sortKey = chosen.Tag?.ToString() ?? "modified-desc";
+        var last = _sortKey.LastIndexOf('-');
+        var field = last < 0 ? "modified" : _sortKey[..last];
+        var direction = _sortKey.EndsWith("-asc", StringComparison.Ordinal) ? "↑" : "↓";
+        var label = field switch
+        {
+            "created" => "Utworzenie",
+            "name" => "Nazwa",
+            "rating" => "Klasyfikacja",
+            "favorites" => "Ulubione",
+            _ => "Modyfikacja"
+        };
+        SortButton.Content = $"{label} {direction}";
+    }
+
+    private async Task ApplySortAsync(string field, string direction)
+    {
+        if (!_isReady) return;
+        _sortKey = field + "-" + direction;
+        UpdateSortCaption();
         await _database.SetViewPreferenceAsync(CurrentViewKey(), _sortKey, _layoutKey);
         await LoadPageAsync();
     }
+
+    private async void SortField_Click(object sender, RoutedEventArgs e)
+    {
+        if (_applyingPreferences || sender is not MenuFlyoutItem chosen) return;
+        var field = chosen.Tag?.ToString() ?? "modified";
+        var direction = _sortKey.EndsWith("-asc", StringComparison.Ordinal) ? "asc" : "desc";
+        await ApplySortAsync(field, direction);
+    }
+
+    private async void SortDirection_Click(object sender, RoutedEventArgs e)
+    {
+        if (_applyingPreferences || sender is not MenuFlyoutItem chosen) return;
+        var direction = chosen.Tag?.ToString() ?? "desc";
+        var last = _sortKey.LastIndexOf('-');
+        var field = last >= 0 ? _sortKey[..last] : "modified";
+        await ApplySortAsync(field, direction);
+    }
+
+    private void TitleFavorites_Click(object sender, RoutedEventArgs e)
+        => FavoritesOnly.IsChecked = FavoritesOnly.IsChecked != true;
 
     private async void ViewModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {

@@ -5,20 +5,43 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="FluentMediaGallery">
     <Grid x:Name="LayoutRoot" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name="SidebarColumn" Width="270" MinWidth="190" MaxWidth="560"/>
             <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="275"/>
+            <ColumnDefinition Width="0"/>
         </Grid.ColumnDefinitions>
 
-        <Border x:Name="SidebarGrip" Grid.Column="1" Background="#35383D"
+        <Grid Grid.Row="0" Grid.ColumnSpan="4" Background="#202226" ColumnSpacing="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="144"/>
+            </Grid.ColumnDefinitions>
+            <Grid x:Name="MainTitleDragRegion" Grid.Column="0" Background="Transparent"
+                  Padding="12,0">
+                <TextBlock Text="FluentMediaGallery" FontSize="11" Foreground="#D2D8DD"
+                           VerticalAlignment="Center"/>
+            </Grid>
+            <Button Grid.Column="1" Content="♡ Ulubione" Click="TitleFavorites_Click"
+                    Padding="10,2" Height="27" FontSize="11"
+                    ToolTipService.ToolTip="Przełącz widok ulubionych"/>
+            <Button Grid.Column="2" Content="📁 +" Click="BrowseSource_Click"
+                    Padding="10,2" Height="27" FontSize="11"
+                    ToolTipService.ToolTip="Dodaj folder do biblioteki"/>
+        </Grid>
+        <Border x:Name="SidebarGrip" Grid.Row="1" Grid.Column="1" Background="#35383D"
                 PointerPressed="SidebarGrip_PointerPressed"
                 PointerMoved="SidebarGrip_PointerMoved"
                 PointerReleased="SidebarGrip_PointerReleased"
                 ToolTipService.ToolTip="Przeciągnij, aby zmienić szerokość panelu"/>
         <!-- Sources are user-selected only; no automatic Pictures/SMB discovery. -->
-        <Border Grid.Column="0" BorderThickness="0,0,1,0"
+        <Border Grid.Row="1" Grid.Column="0" BorderThickness="0,0,1,0"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
             <Grid Padding="16">
                 <Grid.RowDefinitions>
@@ -95,7 +118,7 @@
         </Border>
 
         <!-- Main pane always reads a bounded SQLite page. -->
-        <Grid Grid.Column="2" Padding="14">
+        <Grid Grid.Row="1" Grid.Column="2" Padding="14">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -124,20 +147,28 @@
                 <CheckBox x:Name="FavoritesOnly" Grid.Column="1" Content="Ulubione"
                           Checked="FavoritesOnly_Changed" Unchecked="FavoritesOnly_Changed"
                           VerticalAlignment="Center"/>
-                <ComboBox x:Name="SortBox" Grid.Column="2" MinWidth="170"
-                          SelectionChanged="SortBox_SelectionChanged"
-                          PlaceholderText="Sortowanie">
-                    <ComboBoxItem Tag="modified-desc" Content="Modyfikacja ↓"/>
-                    <ComboBoxItem Tag="modified-asc" Content="Modyfikacja ↑"/>
-                    <ComboBoxItem Tag="created-desc" Content="Utworzenie ↓"/>
-                    <ComboBoxItem Tag="created-asc" Content="Utworzenie ↑"/>
-                    <ComboBoxItem Tag="name-asc" Content="Nazwa A–Z"/>
-                    <ComboBoxItem Tag="name-desc" Content="Nazwa Z–A"/>
-                    <ComboBoxItem Tag="rating-desc" Content="Klasyfikacja 5–0★"/>
-                    <ComboBoxItem Tag="rating-asc" Content="Klasyfikacja 0–5★"/>
-                    <ComboBoxItem Tag="favorites-desc" Content="Ulubione najpierw"/>
-                    <ComboBoxItem Tag="favorites-asc" Content="Pozostałe najpierw"/>
-                </ComboBox>
+                <Button x:Name="SortButton" Grid.Column="2" MinWidth="170"
+                        Content="Sortuj: Modyfikacja ↓">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Tag="modified" Text="Modyfikacja"
+                                            Click="SortField_Click"/>
+                            <MenuFlyoutItem Tag="created" Text="Utworzenie"
+                                            Click="SortField_Click"/>
+                            <MenuFlyoutItem Tag="name" Text="Nazwa"
+                                            Click="SortField_Click"/>
+                            <MenuFlyoutItem Tag="rating" Text="Klasyfikacja"
+                                            Click="SortField_Click"/>
+                            <MenuFlyoutItem Tag="favorites" Text="Ulubione"
+                                            Click="SortField_Click"/>
+                            <MenuFlyoutSeparator/>
+                            <MenuFlyoutItem Tag="asc" Text="↑ Rosnąco"
+                                            Click="SortDirection_Click"/>
+                            <MenuFlyoutItem Tag="desc" Text="↓ Malejąco"
+                                            Click="SortDirection_Click"/>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
                 <ComboBox x:Name="ViewModeBox" Grid.Column="3" MinWidth="120"
                           PlaceholderText="Widok" SelectionChanged="ViewModeBox_SelectionChanged">
                     <ComboBoxItem Tag="square" Content="Kwadrat"/>
@@ -159,7 +190,8 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="52"/>
                 </Grid.ColumnDefinitions>
-            <GridView Grid.Column="0" x:Name="MediaItems" Loaded="MediaItems_Loaded" SelectionMode="None"
+            <GridView Grid.Column="0" x:Name="MediaItems" Loaded="MediaItems_Loaded"
+                      SizeChanged="MediaItems_SizeChanged" SelectionMode="None"
                       IsItemClickEnabled="True" ItemClick="MediaItems_ItemClick"
                       ContainerContentChanging="MediaItems_ContainerContentChanging"
                       HorizontalContentAlignment="Stretch"
@@ -171,7 +203,8 @@
                 </GridView.ItemsPanel>
                 <GridView.ItemTemplate>
                     <DataTemplate>
-                        <Border Width="174" Height="192" Padding="5" CornerRadius="8"
+                        <Border Height="192" Padding="5" Margin="3" CornerRadius="8"
+                                HorizontalAlignment="Stretch"
                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -181,8 +214,8 @@
                                 <Grid Grid.Row="0" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
                                     <TextBlock Text="{Binding TypeMark}" FontSize="40" Opacity="0.2"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" Width="164"
-                                           Height="142"/>
+                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                                           HorizontalAlignment="Stretch" Height="142"/>
                                     <Border Background="#AA202020" CornerRadius="4" HorizontalAlignment="Right"
                                             VerticalAlignment="Bottom" Margin="4" Padding="5,2">
                                         <TextBlock Text="{Binding Description}" FontSize="11" Foreground="White"/>
@@ -279,7 +312,7 @@
             </StackPanel>
         </Grid>
 
-        <Border Grid.Column="3" BorderThickness="1,0,0,0"
+        <Border Grid.Row="1" Grid.Column="3" Visibility="Collapsed" BorderThickness="1,0,0,0"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
             <StackPanel Padding="18" Spacing="14">
                 <TextBlock Text="Szczegóły" FontSize="19" FontWeight="SemiBold"/>
@@ -304,7 +337,7 @@
         </Border>
     
         <!-- In-window photo viewer. Nothing is loaded until a tile is opened. -->
-        <Grid x:Name="ViewerOverlay" Grid.ColumnSpan="4" Visibility="Collapsed"
+        <Grid x:Name="ViewerOverlay" Grid.Row="1" Grid.ColumnSpan="4" Visibility="Collapsed"
               Background="#111315">
             <Grid.RowDefinitions>
                 <RowDefinition Height="62"/>
