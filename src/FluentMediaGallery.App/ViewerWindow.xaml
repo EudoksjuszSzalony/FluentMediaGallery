@@ -64,11 +64,11 @@
                 </MenuFlyout>
             </Grid.ContextFlyout>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="46"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="46"/>
+                <ColumnDefinition x:Name="DetailsPaneColumn" Width="0"/>
             </Grid.ColumnDefinitions>
-            <ScrollViewer Grid.Column="1" x:Name="ZoomScroll" Background="Transparent"
+            <ScrollViewer Grid.Column="0" x:Name="ZoomScroll" Background="Transparent"
+                          SizeChanged="ZoomScroll_SizeChanged"
                           HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                           HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                           ZoomMode="Enabled" MinZoomFactor="0.1" MaxZoomFactor="10"
@@ -78,26 +78,42 @@
                 <Image x:Name="FullImage" Stretch="Fill"
                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </ScrollViewer>
-            <ProgressRing Grid.Column="1" x:Name="LoadingIndicator" Width="52" Height="52"
+            <ProgressRing Grid.Column="0" x:Name="LoadingIndicator" Width="52" Height="52"
                           IsActive="False" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            <TextBlock Grid.Column="1" x:Name="ImageMessage" Foreground="White" FontSize="13"
+            <TextBlock Grid.Column="0" x:Name="ImageMessage" Foreground="White" FontSize="13"
                        TextAlignment="Center" TextWrapping="Wrap"
                        VerticalAlignment="Bottom" HorizontalAlignment="Center"
                        Margin="20" MaxWidth="800"/>
-            <Grid Grid.Column="0" Background="Transparent"
+            <Grid Grid.Column="0" Width="46" HorizontalAlignment="Left" Background="Transparent"
                   PointerEntered="PreviousPointerEntered" PointerExited="PreviousPointerExited">
                 <Button x:Name="PreviousButton" Content="❮" FontSize="18"
                         Width="34" Height="50" Opacity="0" CornerRadius="7"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
                         Click="Previous_Click"/>
             </Grid>
-            <Grid Grid.Column="2" Background="Transparent"
+            <Grid Grid.Column="0" Width="46" HorizontalAlignment="Right" Background="Transparent"
                   PointerEntered="NextPointerEntered" PointerExited="NextPointerExited">
                 <Button x:Name="NextButton" Content="❯" FontSize="18"
                         Width="34" Height="50" Opacity="0" CornerRadius="7"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
                         Click="Next_Click"/>
             </Grid>
+            <!-- Details take their own column; the image re-fits to the remaining width. -->
+        <Border x:Name="DetailsPane" Grid.Column="1" Width="290"
+                HorizontalAlignment="Right" VerticalAlignment="Stretch"
+                Background="#F0202228" BorderBrush="#4D5057" BorderThickness="1,0,0,0"
+                Visibility="Collapsed" Padding="16">
+            <StackPanel Spacing="11">
+                <TextBlock Text="Szczegóły" FontWeight="SemiBold" FontSize="17"/>
+                <TextBlock x:Name="DetailsNameText" Text="" FontWeight="SemiBold"
+                           TextWrapping="WrapWholeWords"/>
+                <TextBlock x:Name="DetailsTypeText" Text="" FontSize="12"/>
+                <TextBlock x:Name="DetailsSizeText" Text="" FontSize="12"/>
+                <TextBlock x:Name="DetailsRatingText" Text="" FontSize="12"/>
+                <TextBlock x:Name="DetailsPathText" Text="" TextWrapping="WrapWholeWords"
+                           FontSize="11" Foreground="#B7BEC7"/>
+            </StackPanel>
+        </Border>
         </Grid>
 
         <Grid Grid.Row="3" Background="#202226" Padding="10,2" ColumnSpacing="5">
@@ -172,21 +188,6 @@
                         ToolTipService.ToolTip="Ukryj pasek miniaturek (F)"/>
             </Grid>
         </Border>
-        <!-- Details only in the separate viewer; overlay never consumes gallery width. -->
-        <Border x:Name="DetailsPane" Grid.Row="2" Width="290"
-                HorizontalAlignment="Right" VerticalAlignment="Stretch"
-                Background="#F0202228" BorderBrush="#4D5057" BorderThickness="1,0,0,0"
-                Visibility="Collapsed" Padding="16">
-            <StackPanel Spacing="11">
-                <TextBlock Text="Szczegóły" FontWeight="SemiBold" FontSize="17"/>
-                <TextBlock x:Name="DetailsNameText" Text="" FontWeight="SemiBold"
-                           TextWrapping="WrapWholeWords"/>
-                <TextBlock x:Name="DetailsTypeText" Text="" FontSize="12"/>
-                <TextBlock x:Name="DetailsSizeText" Text="" FontSize="12"/>
-                <TextBlock x:Name="DetailsRatingText" Text="" FontSize="12"/>
-                <TextBlock x:Name="DetailsPathText" Text="" TextWrapping="WrapWholeWords"
-                           FontSize="11" Foreground="#B7BEC7"/>
-            </StackPanel>
-        </Border>
+
     </Grid>
 </Window>
