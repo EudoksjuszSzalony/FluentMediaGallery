@@ -11,7 +11,7 @@ namespace FluentMediaGallery.App;
 
 public sealed partial class MainWindow : Window
 {
-    private const int PageSize = 100;
+    private const int PageSize = GalleryWindowPolicy.BatchSize;
 
     private readonly LibraryDatabase _database = new();
     private readonly DirectoryIndexer _indexer;
@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
     private string _layoutKey = "square";
     private bool _applyingPreferences;
     private bool _loadingMore;
+    private bool _suppressScrollPaging;
     private bool _resizingSidebar;
     private bool _updatingTimeline;
     private long _timelineMinTicks;
@@ -308,11 +309,13 @@ public sealed partial class MainWindow : Window
             }
             _windowStartOffset = nextOffset;
             _currentPage = nextOffset / PageSize;
+            _suppressScrollPaging = true;
             _rows.Clear();
             foreach (var item in items) _rows.Add(new MediaRow(item));
             UpdateGalleryProgress();
             ApplyLayoutMode();
             await RebuildRiverAsync();
+            ResetGalleryScroll();
         }
         catch (Exception ex)
         {
@@ -324,7 +327,8 @@ public sealed partial class MainWindow : Window
     {
         var from = _rows.Count == 0 ? 0 : _windowStartOffset + 1;
         var to = _windowStartOffset + _rows.Count;
-        PageLabel.Text = $"Wczytano {from:N0}–{to:N0} z {_matchedCount:N0}. Przewiń w dół po następne.";
+        PageLabel.Text = $"W pamięci {from:N0}–{to:N0} z {_matchedCount:N0} " +
+            $"(maks. {GalleryWindowPolicy.MaxRetainedMedia}). Przewijaj w obu kierunkach.";
         LibrarySummary.Text = $"{_matchedCount:N0} mediów • {_sortKey} • {_layoutKey} • SQLite";
         TimelineHeader.Text = _sortKey.StartsWith("rating", StringComparison.Ordinal) ||
                               _sortKey.StartsWith("favorites", StringComparison.Ordinal)
@@ -364,6 +368,67 @@ public sealed partial class MainWindow : Window
         finally { _updatingTimeline = false; }
     }
 
+    private ScrollViewer? CurrentGalleryScroll()
+        => FindScrollViewer(_layoutKey == "river" ? RiverItems : MediaItems);
+
+    private void ResetGalleryScroll()
+    {
+        // A new search, sort, folder or timeline seek has a new absolute origin.
+        _uiDispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            CurrentGalleryScroll()?.ChangeView(null, 0, null, true);
+            _suppressScrollPaging = false;
+        });
+    }
+
+    private void RestoreGalleryScroll(double targetOffset, int version)
+    {
+        _suppressScrollPaging = true;
+        // Defer until the virtualized ItemsPanel has measured inserted/removed rows.
+        _uiDispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            if (version == _queryVersion)
+            {
+                var scroll = CurrentGalleryScroll();
+                if (scroll is not null)
+                {
+                    scroll.UpdateLayout();
+                    scroll.ChangeView(null,
+                        Math.Clamp(targetOffset, 0, scroll.ScrollableHeight), null, true);
+                }
+            }
+            _suppressScrollPaging = false;
+        });
+    }
+
+    private double ApproximateTopHeight(int count)
+    {
+        if (count <= 0) return 0;
+        if (_layoutKey != "river")
+        {
+            var grid = MediaItems.ItemsPanelRoot as ItemsWrapGrid;
+            var itemWidth = grid?.ItemWidth > 0 ? grid.ItemWidth : 184d;
+            var itemHeight = grid?.ItemHeight > 0 ? grid.ItemHeight : 202d;
+            var columns = Math.Max(1, (int)Math.Floor(
+                Math.Max(itemWidth, MediaItems.ActualWidth - 16) / itemWidth));
+            return Math.Ceiling(count / (double)columns) * itemHeight;
+        }
+
+        double pixels = 0;
+        var remaining = count;
+        foreach (var row in _riverRows)
+        {
+            if (remaining <= 0) break;
+            if (row.Tiles.Count == 0) continue;
+            var fraction = Math.Min(remaining, row.Tiles.Count) /
+                           (double)row.Tiles.Count;
+            pixels += fraction * (row.CanvasHeight + 4 +
+                (string.IsNullOrEmpty(row.Header) ? 0 : 26));
+            remaining -= Math.Min(remaining, row.Tiles.Count);
+        }
+        return pixels;
+    }
+
     private async Task AppendMoreAsync()
     {
         if (_loadingMore || !_isReady) return;
@@ -374,15 +439,72 @@ public sealed partial class MainWindow : Window
         _loadingMore = true;
         try
         {
+            var scroll = CurrentGalleryScroll();
+            var oldOffset = scroll?.VerticalOffset ?? 0;
             var items = await _database.GetPageAsync(next, PageSize,
                 FavoritesOnly.IsChecked == true, SearchBox.Text.Trim(),
                 sourceId: _selectedSourceId, folderPath: _selectedFolderPath,
                 sortKey: _sortKey);
-            if (version != _queryVersion) return;
+            if (version != _queryVersion || items.Count == 0) return;
+
+            var prune = Math.Min(_rows.Count,
+                GalleryWindowPolicy.TrimExcess(_rows.Count, items.Count));
+            var removedHeight = ApproximateTopHeight(prune);
             foreach (var item in items) _rows.Add(new MediaRow(item));
+            for (var i = 0; i < prune; i++) _rows.RemoveAt(0);
+            _windowStartOffset += prune;
+
+            await RebuildRiverAsync();
+            if (version != _queryVersion) return;
             UpdateGalleryProgress();
+            if (prune > 0)
+                RestoreGalleryScroll(oldOffset - removedHeight, version);
         }
-        catch (Exception ex) { OperationStatus.Text = "Błąd wczytywania kolejnych mediów: " + ex.Message; }
+        catch (Exception ex)
+        {
+            OperationStatus.Text = "Błąd wczytywania kolejnych mediów: " + ex.Message;
+        }
+        finally { _loadingMore = false; }
+    }
+
+    private async Task PrependEarlierAsync()
+    {
+        if (_loadingMore || !_isReady || _windowStartOffset <= 0) return;
+
+        var version = _queryVersion;
+        var previous = GalleryWindowPolicy.PreviousBatchOffset(_windowStartOffset);
+        var count = _windowStartOffset - previous;
+        if (count == 0) return;
+
+        _loadingMore = true;
+        try
+        {
+            var scroll = CurrentGalleryScroll();
+            var oldOffset = scroll?.VerticalOffset ?? 0;
+            var items = await _database.GetPageAsync(previous, count,
+                FavoritesOnly.IsChecked == true, SearchBox.Text.Trim(),
+                sourceId: _selectedSourceId, folderPath: _selectedFolderPath,
+                sortKey: _sortKey);
+            if (version != _queryVersion || items.Count == 0) return;
+
+            var prune = Math.Min(_rows.Count,
+                GalleryWindowPolicy.TrimExcess(_rows.Count, items.Count));
+            for (var i = items.Count - 1; i >= 0; i--)
+                _rows.Insert(0, new MediaRow(items[i]));
+            _windowStartOffset = previous;
+            for (var i = 0; i < prune; i++)
+                _rows.RemoveAt(_rows.Count - 1);
+
+            await RebuildRiverAsync();
+            if (version != _queryVersion) return;
+            var insertedHeight = ApproximateTopHeight(items.Count);
+            UpdateGalleryProgress();
+            RestoreGalleryScroll(oldOffset + insertedHeight, version);
+        }
+        catch (Exception ex)
+        {
+            OperationStatus.Text = "Błąd wczytywania poprzednich mediów: " + ex.Message;
+        }
         finally { _loadingMore = false; }
     }
 
@@ -426,9 +548,14 @@ public sealed partial class MainWindow : Window
 
     private async void GalleryScroll_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (sender is not ScrollViewer scroll) return;
-        if (scroll.VerticalOffset + scroll.ViewportHeight >= scroll.ExtentHeight - scroll.ViewportHeight &&
-            scroll.ExtentHeight > scroll.ViewportHeight)
+        if (sender is not ScrollViewer scroll || _loadingMore || _suppressScrollPaging)
+            return;
+        if (scroll.VerticalOffset < Math.Min(130, scroll.ViewportHeight * 0.25) &&
+            _windowStartOffset > 0)
+            await PrependEarlierAsync();
+        else if (scroll.VerticalOffset + scroll.ViewportHeight >=
+                 scroll.ExtentHeight - scroll.ViewportHeight * 0.8 &&
+                 scroll.ExtentHeight > scroll.ViewportHeight)
             await AppendMoreAsync();
     }
 
