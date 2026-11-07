@@ -8,7 +8,9 @@ static void Check(bool condition, string reason)
 
 Check(FavoriteRatingPolicy.IsLegacyFavorite(75), "4-star rating 75 imports as favorite");
 Check(FavoriteRatingPolicy.IsLegacyFavorite(63), "4-star low boundary 63");
-Check(!FavoriteRatingPolicy.IsLegacyFavorite(99), "5 stars do not import as favorites");
+Check(FavoriteRatingPolicy.IsLegacyFavorite(99), "5 stars import as favorites");
+Check(FavoriteRatingPolicy.IsLegacyFavorite(88), "5 stars lower bound imports as favorites");
+Check(!FavoriteRatingPolicy.IsLegacyFavorite(62), "3 stars not favorite");
 Check(!FavoriteRatingPolicy.IsLegacyFavorite(1), "1 star not favorite");
 Check(FavoriteRatingPolicy.IsFavorite(true, 1), "override true wins over file");
 Check(!FavoriteRatingPolicy.IsFavorite(false, 75), "override false wins over file");
@@ -33,11 +35,27 @@ try
     var photo = firstPage.Single(x => x.Name == "one.jpg");
     await database.SetFavoriteOverrideAsync(photo.Id, true);
     Check((await database.GetPageAsync(0, 100, favoritesOnly: true)).Count == 1, "favorite override persists");
+    Check((await database.GetFavoriteWriteStateAsync(photo.Id)).Pending, "metadata write queued");
+    await database.RecordFavoriteFileWriteErrorAsync(photo.Id, true, "not writable");
+    Check((await database.GetFavoriteWriteStateAsync(photo.Id)).Error == "not writable",
+        "metadata error is retained without losing favorite");
+    Check((await database.GetPendingFavoriteWritesAsync()).Count == 1, "pending metadata synchronization tracked");
+    await database.CompleteFavoriteFileWriteAsync(photo.Id, true, 99);
+    Check(!(await database.GetFavoriteWriteStateAsync(photo.Id)).Pending, "success clears pending metadata");
+    Check((await database.GetByIdAsync(photo.Id))?.FileRating == 99, "5-star rating stored in index");
     Check((await database.GetPageAsync(0, 100, search: "one")).Count == 1, "search works");
 
     var dbReopened = new LibraryDatabase(database.DatabasePath);
     await dbReopened.InitializeAsync();
     Check((await dbReopened.GetPageAsync(0, 100, favoritesOnly: true)).Count == 1, "restart retains favorite without rescan");
+    await dbReopened.SetFavoriteOverrideAsync(photo.Id, false);
+    Check((await dbReopened.GetPageAsync(0, 100, favoritesOnly: true)).Count == 0, "unfavorite overrides 5-star file");
+    await dbReopened.CompleteFavoriteFileWriteAsync(photo.Id, false, 1);
+    Check((await dbReopened.GetByIdAsync(photo.Id))?.FileRating == 1, "unfavorite stores 1 star");
+    await dbReopened.SetFavoriteOverrideAsync(photo.Id, null);
+    Check((await dbReopened.GetByIdAsync(photo.Id))?.IsFavorite == false, "clear override inherits one-star rating");
+    await dbReopened.SetFavoriteOverrideAsync(photo.Id, true);
+    await dbReopened.CompleteFavoriteFileWriteAsync(photo.Id, true, 75);
 
     File.Delete(Path.Combine(root, "two.mkv"));
     await scanner.ScanAsync(source);

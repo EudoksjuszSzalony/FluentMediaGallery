@@ -56,7 +56,9 @@ public sealed class LibraryDatabase
                 missing INTEGER NOT NULL DEFAULT 0,
                 rating_raw INTEGER,
                 rating_checked INTEGER NOT NULL DEFAULT 0,
-                favorite_override INTEGER
+                favorite_override INTEGER,
+                favorite_write_pending INTEGER NOT NULL DEFAULT 0,
+                favorite_write_error TEXT
             );
             CREATE INDEX IF NOT EXISTS ix_media_browse
                 ON media(missing, modified_ticks DESC, id DESC);
@@ -66,6 +68,27 @@ public sealed class LibraryDatabase
                 ON media(rating_checked, missing, id);
             """;
         await cmd.ExecuteNonQueryAsync(ct);
+
+        // Additive migration for databases created before file-metadata write support.
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = connection.CreateCommand())
+        {
+            info.CommandText = "PRAGMA table_info(media);";
+            await using var reader = await info.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) columns.Add(reader.GetString(1));
+        }
+        if (!columns.Contains("favorite_write_pending"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE media ADD COLUMN favorite_write_pending INTEGER NOT NULL DEFAULT 0;";
+            await alter.ExecuteNonQueryAsync(ct);
+        }
+        if (!columns.Contains("favorite_write_error"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE media ADD COLUMN favorite_write_error TEXT;";
+            await alter.ExecuteNonQueryAsync(ct);
+        }
     }
 
     public async Task<LibrarySource> AddSourceAsync(string sourcePath, CancellationToken ct = default)
@@ -187,7 +210,7 @@ public sealed class LibraryDatabase
         cmd.CommandText = """
             SELECT id, source_id, path, file_name, kind, size, modified_ticks, rating_raw,
                 favorite_override,
-                COALESCE(favorite_override, CASE WHEN rating_raw BETWEEN 63 AND 87 THEN 1 ELSE 0 END) AS fav
+                COALESCE(favorite_override, CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END) AS fav
             FROM media WHERE missing=0
                 AND ($favorites=0 OR COALESCE(favorite_override,
                     CASE WHEN rating_raw BETWEEN 63 AND 87 THEN 1 ELSE 0 END)=1)
@@ -213,14 +236,103 @@ public sealed class LibraryDatabase
         return result;
     }
 
+    public async Task<MediaEntry?> GetByIdAsync(long mediaId, CancellationToken ct = default)
+    {
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT id,source_id,path,file_name,kind,size,modified_ticks,rating_raw,
+                favorite_override,
+                COALESCE(favorite_override,CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END)
+            FROM media WHERE id=$id;
+            """;
+        cmd.Parameters.AddWithValue("$id", mediaId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        return new MediaEntry(reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2),
+            reader.GetString(3), (MediaKind)reader.GetInt32(4), reader.GetInt64(5),
+            reader.GetInt64(6), reader.IsDBNull(7) ? null : reader.GetInt32(7),
+            reader.IsDBNull(8) ? null : reader.GetInt32(8) != 0, reader.GetInt64(9) != 0);
+    }
+
+    // This persists the user's choice first. File metadata synchronization is handled by FavoritesService.
     public async Task SetFavoriteOverrideAsync(long mediaId, bool? favorite, CancellationToken ct = default)
     {
         await using var connection = await OpenAsync(ct);
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "UPDATE media SET favorite_override=$fav WHERE id=$id;";
+        cmd.CommandText = """
+            UPDATE media SET favorite_override=$fav,
+                favorite_write_pending=CASE WHEN $fav IS NULL THEN 0 ELSE 1 END,
+                favorite_write_error=NULL
+            WHERE id=$id;
+            """;
         cmd.Parameters.AddWithValue("$fav", favorite is null ? DBNull.Value : favorite.Value ? 1 : 0);
         cmd.Parameters.AddWithValue("$id", mediaId);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<FavoriteWriteCandidate>> GetPendingFavoriteWritesAsync(
+        int limit = 32, CancellationToken ct = default)
+    {
+        var result = new List<FavoriteWriteCandidate>();
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT m.id,m.path,m.favorite_override FROM media m
+            JOIN sources s ON s.id=m.source_id
+            WHERE m.favorite_write_pending=1 AND m.favorite_override IS NOT NULL
+              AND m.missing=0 AND s.is_online=1
+            ORDER BY m.id LIMIT $limit;
+            """;
+        cmd.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 128));
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            result.Add(new FavoriteWriteCandidate(reader.GetInt64(0), reader.GetString(1),
+                reader.GetInt32(2) != 0));
+        return result;
+    }
+
+    public async Task CompleteFavoriteFileWriteAsync(long mediaId, bool expectedFavorite,
+        int persistedRating, CancellationToken ct = default)
+    {
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            UPDATE media SET rating_raw=$rating, rating_checked=1,
+                favorite_write_pending=0, favorite_write_error=NULL
+            WHERE id=$id AND favorite_override=$expected;
+            """;
+        cmd.Parameters.AddWithValue("$id", mediaId);
+        cmd.Parameters.AddWithValue("$expected", expectedFavorite ? 1 : 0);
+        cmd.Parameters.AddWithValue("$rating", persistedRating);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task RecordFavoriteFileWriteErrorAsync(long mediaId, bool expectedFavorite,
+        string reason, CancellationToken ct = default)
+    {
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            UPDATE media SET favorite_write_pending=1, favorite_write_error=$reason
+            WHERE id=$id AND favorite_override=$expected;
+            """;
+        cmd.Parameters.AddWithValue("$id", mediaId);
+        cmd.Parameters.AddWithValue("$expected", expectedFavorite ? 1 : 0);
+        cmd.Parameters.AddWithValue("$reason", reason.Length > 500 ? reason[..500] : reason);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<(bool Pending, string? Error)> GetFavoriteWriteStateAsync(
+        long mediaId, CancellationToken ct = default)
+    {
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT favorite_write_pending,favorite_write_error FROM media WHERE id=$id;";
+        cmd.Parameters.AddWithValue("$id", mediaId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) throw new KeyNotFoundException("Unknown media id: " + mediaId);
+        return (reader.GetInt64(0) != 0, reader.IsDBNull(1) ? null : reader.GetString(1));
     }
 
     public async Task<IReadOnlyList<RatingCandidate>> GetPendingRatingsAsync(int limit = 64, CancellationToken ct = default)

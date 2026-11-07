@@ -20,13 +20,16 @@ public sealed record MediaFile(
     string FullPath, string Name, MediaKind Kind, long Size, long LastWriteUtcTicks);
 
 public sealed record RatingCandidate(long Id, string Path);
+public sealed record FavoriteWriteCandidate(long Id, string Path, bool Favorite);
+public sealed record RatingWriteResult(bool Success, int? PersistedRating, string? Error);
+public sealed record FavoriteUpdateResult(long MediaId, bool IsFavorite, bool StoredInFile, string? Error);
 
 public sealed record ScanResult(long SourceId, int Discovered, int Errors, bool Completed, bool Online);
 
 public static class FavoriteRatingPolicy
 {
     // Microsoft Photos' historical favorites convention, not a general 4-or-more star threshold.
-    public static bool IsLegacyFavorite(int? rawRating) => rawRating is >= 63 and <= 87;
+    public static bool IsLegacyFavorite(int? rawRating) => rawRating is >= 63 and <= 99;
     public static bool IsLegacyUnfavorite(int? rawRating) => rawRating is >= 1 and <= 12;
     public static bool IsFavorite(bool? appOverride, int? rawRating)
         => appOverride ?? IsLegacyFavorite(rawRating);
