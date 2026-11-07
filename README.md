@@ -32,3 +32,11 @@ The user has verified **Core** on Dominator with `Microsoft.Data.Sqlite 10.0.14`
 To test the new app, open `src/FluentMediaGallery.App/FluentMediaGallery.App.csproj` with the Windows .NET 10 SDK/Windows App SDK toolchain and build Release. The UI is unpackaged and self-contained for Windows App SDK runtime. First use **copies of media** in a small local test folder, never the entire personal library. An explicit favorite change may attempt to write file metadata.
 
 No original media or database belongs in Git. User data/index is under `%LOCALAPPDATA%\FluentMediaGallery`. MIT license governs the project code; video codecs will carry separate notices.
+
+## Separate viewer and indexed folders (new development source, unverified)
+
+After a tile click, the gallery opens a separate WinUI ViewerWindow with navigation tied to the originating gallery context (folder, selected root, favorites or all media, plus filename search). The viewer has a hideable filmstrip (F), favorites (L), mouse wheel/arrow navigation, Esc, 25–500% zoom slider and Ctrl+numpad +/-, right-click menu and hover-fading navigation arrows.
+
+The gallery sidebar now shows expandable directories represented by indexed media paths. An icon button opens the native folder picker. Registering a nested folder creates a persistent shortcut to the existing indexed source, not a second index, while adding an overlapping ancestor is blocked. Empty folders aren't listed unless they contain indexed media.
+
+**This new revision is not yet built or visually verified on Dominator.** Full video playback, user-selectable sorting and polished filmstrip animations are future steps.

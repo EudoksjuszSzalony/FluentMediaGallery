@@ -60,3 +60,9 @@ No push or pull_request workflows during development. Use local tests; reserve A
 - The initial in-window viewer is a Grid overlay spanning all three main columns; opens on tile click, uses Windows StorageFile/BitmapImage for full-size preview with DecodePixelWidth=2560, arrows and Esc keyboard shortcuts, previous/next across bounded 100-row SQLite pages, and a horizontal filmstrip of the current page's thumbnails.
 - Shared favorite action updates SQLite then tries verified System.Rating file write, with one-time confirmation dialog and error state. Filmstrip and viewer source is read-only until the user explicitly toggles favorite.
 - Film placeholders use Windows Shell extracted thumbnail; **no video playback yet**. Zoom/pan and OS fullscreen not implemented. All this viewer/rating automation code **committed but not yet tested** on Dominator.
+
+## Folder tree and new image Window (2026-11-07)
+
+Core RegisterLocationAsync records an explicitly selected nested folder in the SQLite shortcuts table and prevents duplicate index sources. Parent-ancestor overlaps are rejected with an explanatory error. GetIndexedChildFoldersAsync uses DISTINCT path prefixes in SQLite and is useful offline, with lazy expand in sidebar. Folder filters are bounded SQL prefix queries; empty directories without indexed media are not yet shown.
+
+ViewerWindow uses a snapshot GalleryViewContext and paged database queries to navigate without changing the main gallery. WinUI ScrollViewer provides optical zoom, slider, Ctrl+numpad controls. F toggles current-page filmstrip, L favorite, Esc closes, wheel/arrow changes item, PPM flyout and hover 180 ms navigation arrows. Sorting remains fixed modified-desc. New standalone viewer and folder UI are committed but not yet built on Dominator.

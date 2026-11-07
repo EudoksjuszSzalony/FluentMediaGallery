@@ -98,3 +98,26 @@ Free public Windows 11 Fluent Photos-like gallery, with native WinUI 3 UI, photo
 - New UI (commits `a83dfbc`, `70ee148`, `4a3cffc`) adds **in-window photo viewer** with background decoded image loading and 2560px max decode width, left/right navigation across pages, Esc to close, horizontal filmstrip backed by current 100-row SQLite page, favorite toggle via shared existing verified-write workflow. Videos can show a Shell extracted still thumbnail and explicitly say playback is not yet implemented. The viewer is NOT OS fullscreen, does not have pan/zoom and is limited to paginated in-memory rows.
 - **Status: new viewer and automatic per-source rating importer source commits exist on develop but are NOT YET BUILT OR TESTED on Dominator.** Need focused local build/GUI check. No GitHub Actions triggered.
 - Build caution: close previous FluentMediaGallery process before rebuild to avoid MSB3026/MSB3027 file lock; scripts/Build-WinUIPreview.ps1 detects it and aborts without killing it. Do not clean bin/obj unless truly necessary. Next UI test should use copies, including a JPG rated 4/5 stars and a 1-star JPG to verify imported favorites.
+
+## 2026-11-07 — Dominator viewer PASS, new separate-window and folder-tree stage
+
+USER EVIDENCE:
+- User demonstrated actual Dominator WinUI 3 app at commit 8c5cd01: Release x64 build PASS and screenshot of an open image in previous in-window viewer, correct picture with filmstrip and visible favorite indicator. This verifies previous viewer display only, not new standalone-window code.
+- User requests nested expandable folders for CP77, folder-plus button invoking native folder picker, and safe shortcuts if a subfolder is registered within an existing indexed root (avoid duplicate sources).
+- User also requests independent native image-viewer window, retain context (source/folder/all/favorites and later sort), F filmstrip, L favorite, Esc, mouse wheel navigation, Ctrl+numpad +/- zoom, slider, hover-only arrows, right-click menu and motion animations.
+
+IMPLEMENTED ON DEVELOP (SOURCE ONLY; NOT YET BUILT ON DOMINATOR):
+- Core: additive SQLite shortcuts table; RegisterLocationAsync records a nested path as a shortcut referencing existing source; adding an ancestor of an existing source is blocked to prevent overlapping indexing. Folder-filtered GetPageAsync/CountFilteredAsync and SQLite-only GetIndexedChildFoldersAsync (offline source retains last indexed subfolders). Smoke tests expanded for shortcut persistence, no duplicate source, folder filtering and immediate subfolder discovery.
+- Main UI: expandable, lazily built hierarchy for indexed subfolders; extra shortcut rows; button with folder and plus icons using Windows.Storage.Pickers.FolderPicker and WinRT.Interop.InitializeWithWindow; UNC manual text box retained. Selecting subfolder filters existing SQLite rows. No background disk traversal on startup.
+- Standalone ViewerWindow.xaml and ViewerWindow.xaml.cs: launches a new native WinUI Window for any clicked tile, retaining a GalleryViewContext snapshot of source, folder, favorites, filename search and fixed modified-desc ordering. Uses SQLite paging (100/page) across boundaries, never loads all files at once. Gallery stays open.
+- Viewer: image rendering on demand, 25–500% ScrollViewer optical zoom with slider and Ctrl+Numpad +/- (Ctrl+Num 0 to fit), F toggles filmstrip, L toggles favorite, wheel and left/right keys navigate, Esc closes, right-click menu supports favorites, filmstrip, zoom, copy path and open Explorer. Nav arrows hidden until mouse hover with 180 ms fade. Video shows still-image placeholder only; no playback yet.
+- Existing hidden in-main-window viewer overlay and associated code remain temporarily as safe fallback until standalone viewer compiles and passes smoke test; gallery click now opens the separate ViewerWindow.
+- Sorting currently is fixed modified_ticks DESC/id DESC; SortKey is passed for future ordering but selectable sorting is NOT YET IMPLEMENTED. Filmstrip hide is immediate; other animations may be added after verification.
+
+VALIDATION STATUS: New revision committed, static checks for WinUI XAML event handlers and relevant SQLite code performed, but NOT compiled or tested on Dominator. Do not call it working until tested. No GitHub Actions triggered.
+
+NEXT STEPS:
+1. Close running FluentMediaGallery first, use scripts/Build-WinUIPreview.ps1 -Start in USER PowerShell; run Core.Smoke once for new DB logic. Fix any concrete WinUI compiler errors without blind bin/obj cleanup.
+2. Verify gallery remains open and second OS window appears; navigate boundary of 100-row page; test Ctrl+Numpad +/-, L, F, wheel, Esc, zoom slider, right-click menu, fade arrow hotspots. Test metadata writes ONLY on media COPIES.
+3. Expand CP77 subdirectories in left sidebar; use folder-plus picker; add an already indexed child as shortcut and confirm no duplicate source/media. Test on an offline source separately.
+4. After PASS, remove legacy overlay code and implement selectable/persisted sorting, polished animations, video playback and robust large-library indexing.
