@@ -40,3 +40,11 @@ After a tile click, the gallery opens a separate WinUI ViewerWindow with navigat
 The gallery sidebar now shows expandable directories represented by indexed media paths. An icon button opens the native folder picker. Registering a nested folder creates a persistent shortcut to the existing indexed source, not a second index, while adding an overlapping ancestor is blocked. Empty folders aren't listed unless they contain indexed media.
 
 **This new revision is not yet built or visually verified on Dominator.** Full video playback, user-selectable sorting and polished filmstrip animations are future steps.
+
+## New development batch — 2026-11-07 (unverified on Dominator)
+
+The new source supports a compact dark standalone viewer titlebar, default Fit-to-window zoom with actual-percent readout, resize refitting, a low-profile right-aligned zoom control, smaller hover-only arrows and a shorter, stable filmstrip with selected-item marker.
+
+Gallery changes: adjustable sidebar width, right-hand folder expand chevrons, remembered per-folder sort/layout settings (including classification and favorite ordering), endless incremental batches of 100 records instead of visible pagination, a preliminary vertical date/rating scrubber, and the new justified image-proportional **Rzeka** view (photo dimensions read only for loaded batches). `System.Drawing` thumbnail generation remains 320 px; no 800 px tier exists. Date taken/EXIF is not yet a sort key. A truly memory-bounded virtual source and optimized scrubber/river remain future work.
+
+**Important:** previous WinUI build and UI screenshots at b7cfbbd PASS on Dominator. The changes in THIS batch are committed but **NOT YET BUILT OR VERIFIED**, and may require targeted compile fixes.
