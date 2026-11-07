@@ -262,21 +262,31 @@
                                        FontWeight="SemiBold" FontSize="12"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        Margin="3,5,0,8"/>
-                            <ItemsControl ItemsSource="{Binding Tiles}">
+                            <ItemsControl ItemsSource="{Binding Tiles}"
+                                          Width="{Binding CanvasWidth}"
+                                          Height="{Binding CanvasHeight}"
+                                          HorizontalAlignment="Left">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" Spacing="3"/>
+                                        <Canvas/>
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding Left}"/>
+                                        <Setter Property="Canvas.Top" Value="{Binding Top}"/>
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Button Click="RiverTile_Click" Tag="{Binding Media}"
                                                 Width="{Binding Width}" Height="{Binding Height}"
                                                 Margin="0" Padding="0" BorderThickness="0"
-                                                Background="Transparent">
+                                                CornerRadius="3" Background="Transparent">
                                             <Grid Width="{Binding ImageWidth}" Height="{Binding ImageHeight}"
                                                   Background="#26292C">
-                                                <Image Source="{Binding Media.Thumbnail}" Stretch="UniformToFill"/>
+                                                <Image Source="{Binding Media.Thumbnail}"
+                                                       Stretch="UniformToFill"/>
                                                 <TextBlock Text="{Binding Media.Heart}"
                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
                                                            FontSize="19" Foreground="IndianRed" Margin="4"/>

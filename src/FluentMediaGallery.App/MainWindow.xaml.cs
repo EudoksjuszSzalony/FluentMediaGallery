@@ -206,10 +206,14 @@ public sealed partial class MainWindow : Window
 
     private static bool SameRiverRow(RiverRow a, RiverRow b)
     {
-        if (a.Header != b.Header || a.Tiles.Count != b.Tiles.Count) return false;
+        if (a.Header != b.Header || a.Tiles.Count != b.Tiles.Count ||
+            a.CanvasHeight != b.CanvasHeight || a.CanvasWidth != b.CanvasWidth)
+            return false;
         for (var i = 0; i < a.Tiles.Count; i++)
         {
             if (a.Tiles[i].Media.Entry.Id != b.Tiles[i].Media.Entry.Id ||
+                a.Tiles[i].Left != b.Tiles[i].Left ||
+                a.Tiles[i].Top != b.Tiles[i].Top ||
                 a.Tiles[i].ImageWidth != b.Tiles[i].ImageWidth ||
                 a.Tiles[i].ImageHeight != b.Tiles[i].ImageHeight)
                 return false;
