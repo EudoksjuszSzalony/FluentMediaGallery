@@ -78,6 +78,29 @@ try
     await dbReopened.SetFavoriteOverrideAsync(photo.Id, true);
     await dbReopened.CompleteFavoriteFileWriteAsync(photo.Id, true, 75);
 
+    // Nested folders are virtual shortcuts: one source, one physical index.
+    var nested = Path.Combine(root, "nested");
+    Directory.CreateDirectory(nested);
+    File.WriteAllText(Path.Combine(nested, "inside.jpg"), "fixture");
+    var nestedRegistration = await database.RegisterLocationAsync(nested);
+    Check(nestedRegistration.IsShortcut && nestedRegistration.IsNew,
+        "adding nested folder creates a shortcut instead of a second source");
+    Check((await database.RegisterLocationAsync(nested)).IsShortcut,
+        "registering the same nested path stays a shortcut");
+    Check((await database.ListSourcesAsync()).Count == 1, "no duplicated index source");
+    Check((await database.ListShortcutsAsync()).Count == 1, "shortcut persisted in SQLite");
+    await scanner.ScanAsync(source);
+    Check((await database.GetIndexedChildFoldersAsync(source.Id, root))
+        .Any(p => p.Equals(nested, StringComparison.OrdinalIgnoreCase)), "child folder exists in index");
+    Check((await database.GetPageAsync(0, 100, sourceId: source.Id, folderPath: nested)).Count == 1,
+        "folder view returns only descendants");
+    Check(await database.CountFilteredAsync(sourceId: source.Id, folderPath: nested) == 1,
+        "folder count matches folder-filtered pagination");
+    Check((await database.GetPageAsync(0, 100, sourceId: source.Id)).Count == 3,
+        "shortcut does not duplicate media");
+    Directory.Delete(nested, true);
+    await scanner.ScanAsync(source);
+
     File.Delete(Path.Combine(root, "two.mkv"));
     await scanner.ScanAsync(source);
     Check(await database.CountMediaAsync() == 1, "successful rescan marks disappeared video as missing");

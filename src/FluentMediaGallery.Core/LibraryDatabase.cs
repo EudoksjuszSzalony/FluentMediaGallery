@@ -44,6 +44,12 @@ public sealed class LibraryDatabase
                 last_scan_utc TEXT,
                 last_error TEXT
             );
+            CREATE TABLE IF NOT EXISTS shortcuts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_id INTEGER NOT NULL REFERENCES sources(id),
+                folder_path TEXT NOT NULL COLLATE NOCASE UNIQUE
+            );
+            CREATE INDEX IF NOT EXISTS ix_shortcuts_source ON shortcuts(source_id);
             CREATE TABLE IF NOT EXISTS media (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_id INTEGER NOT NULL REFERENCES sources(id),
@@ -89,6 +95,104 @@ public sealed class LibraryDatabase
             alter.CommandText = "ALTER TABLE media ADD COLUMN favorite_write_error TEXT;";
             await alter.ExecuteNonQueryAsync(ct);
         }
+    }
+
+
+    private static string NormalizeFolder(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("Folder path cannot be empty.", nameof(path));
+        var full = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim()));
+        if (!Path.IsPathFullyQualified(full))
+            throw new ArgumentException("Folder must be an absolute path.", nameof(path));
+        return Path.TrimEndingDirectorySeparator(full);
+    }
+
+    private static bool IsSameOrDescendant(string path, string root)
+    {
+        return path.Equals(root, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string EscapeLike(string value)
+        => value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+
+    /// <summary>
+    /// If folder is nested under an existing root, register a shortcut, NOT a second
+    /// index source. A new ancestor of an existing root is refused to avoid duplicate scans.
+    /// Does not touch the source filesystem or scan anything.
+    /// </summary>
+    public async Task<MediaLocation> RegisterLocationAsync(string folderPath,
+        CancellationToken ct = default)
+    {
+        var folder = NormalizeFolder(folderPath);
+        var sources = await ListSourcesAsync(ct);
+        foreach (var source in sources)
+        {
+            if (folder.Equals(source.Root, StringComparison.OrdinalIgnoreCase))
+                return new MediaLocation(source.Id, folder, false, false);
+            if (!IsSameOrDescendant(folder, source.Root)) continue;
+
+            await using var connection = await OpenAsync(ct);
+            using var insert = connection.CreateCommand();
+            insert.CommandText = """
+                INSERT INTO shortcuts(source_id,folder_path) VALUES($source,$folder)
+                ON CONFLICT(folder_path) DO NOTHING;
+                """;
+            insert.Parameters.AddWithValue("$source", source.Id);
+            insert.Parameters.AddWithValue("$folder", folder);
+            var created = await insert.ExecuteNonQueryAsync(ct) != 0;
+            return new MediaLocation(source.Id, folder, true, created);
+        }
+
+        if (sources.Any(s => IsSameOrDescendant(s.Root, folder)))
+            throw new InvalidOperationException(
+                "This folder contains an already indexed source. Remove or consolidate the existing source first; duplicate scanning is blocked.");
+
+        var added = await AddSourceAsync(folder, ct);
+        return new MediaLocation(added.Id, folder, false, true);
+    }
+
+    public async Task<IReadOnlyList<MediaLocation>> ListShortcutsAsync(CancellationToken ct = default)
+    {
+        var items = new List<MediaLocation>();
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT source_id,folder_path FROM shortcuts ORDER BY folder_path COLLATE NOCASE;";
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            items.Add(new MediaLocation(reader.GetInt64(0), reader.GetString(1), true, false));
+        return items;
+    }
+
+    /// <summary>
+    /// Lists immediate children having at least one indexed media item; makes no filesystem calls
+    /// and remains useful when the selected NAS is temporarily offline.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetIndexedChildFoldersAsync(long sourceId,
+        string parentPath, CancellationToken ct = default)
+    {
+        var parent = NormalizeFolder(parentPath);
+        var prefix = parent.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var children = new List<string>();
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT DISTINCT substr(path, 1,
+                length($prefix) + instr(substr(path, length($prefix)+1), '\') - 1) AS child
+            FROM media
+            WHERE source_id=$source AND missing=0
+              AND path LIKE $like ESCAPE '\'
+              AND instr(substr(path, length($prefix)+1), '\') > 0
+            ORDER BY child COLLATE NOCASE LIMIT 1000;
+            """;
+        cmd.Parameters.AddWithValue("$source", sourceId);
+        cmd.Parameters.AddWithValue("$prefix", prefix);
+        cmd.Parameters.AddWithValue("$like", EscapeLike(prefix) + "%");
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct)) children.Add(reader.GetString(0));
+        return children;
     }
 
     public async Task<LibrarySource> AddSourceAsync(string sourcePath, CancellationToken ct = default)
@@ -202,7 +306,7 @@ public sealed class LibraryDatabase
 
     public async Task<IReadOnlyList<MediaEntry>> GetPageAsync(int offset, int limit,
         bool favoritesOnly = false, string? search = null, CancellationToken ct = default,
-        long? sourceId = null)
+        long? sourceId = null, string? folderPath = null)
     {
         if (offset < 0 || limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
         var result = new List<MediaEntry>();
@@ -214,12 +318,16 @@ public sealed class LibraryDatabase
                 COALESCE(favorite_override, CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END) AS fav
             FROM media WHERE missing=0
                 AND ($source=0 OR source_id=$source)
+                AND ($folder='' OR path LIKE $folder ESCAPE '\')
                 AND ($favorites=0 OR COALESCE(favorite_override,
                     CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END)=1)
                 AND ($search='' OR file_name LIKE $search ESCAPE '\')
             ORDER BY modified_ticks DESC, id DESC LIMIT $limit OFFSET $offset;
             """;
         cmd.Parameters.AddWithValue("$source", sourceId.GetValueOrDefault());
+        cmd.Parameters.AddWithValue("$folder", folderPath is null ? "" :
+            EscapeLike(NormalizeFolder(folderPath).TrimEnd(Path.DirectorySeparatorChar) +
+            Path.DirectorySeparatorChar) + "%");
         cmd.Parameters.AddWithValue("$favorites", favoritesOnly ? 1 : 0);
         cmd.Parameters.AddWithValue("$search", string.IsNullOrWhiteSpace(search) ? "" :
             "%" + search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%");
@@ -372,18 +480,23 @@ public sealed class LibraryDatabase
     /// Counts rows matching the same filters as GetPageAsync without loading media objects.
     /// </summary>
     public async Task<long> CountFilteredAsync(long? sourceId = null,
-        bool favoritesOnly = false, string? search = null, CancellationToken ct = default)
+        bool favoritesOnly = false, string? search = null, CancellationToken ct = default,
+        string? folderPath = null)
     {
         await using var connection = await OpenAsync(ct);
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             SELECT COUNT(*) FROM media
             WHERE missing=0 AND ($source=0 OR source_id=$source)
+              AND ($folder='' OR path LIKE $folder ESCAPE '\')
               AND ($favorites=0 OR COALESCE(favorite_override,
                     CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END)=1)
               AND ($search='' OR file_name LIKE $search ESCAPE '\');
             """;
         cmd.Parameters.AddWithValue("$source", sourceId.GetValueOrDefault());
+        cmd.Parameters.AddWithValue("$folder", folderPath is null ? "" :
+            EscapeLike(NormalizeFolder(folderPath).TrimEnd(Path.DirectorySeparatorChar) +
+            Path.DirectorySeparatorChar) + "%");
         cmd.Parameters.AddWithValue("$favorites", favoritesOnly ? 1 : 0);
         cmd.Parameters.AddWithValue("$search", string.IsNullOrWhiteSpace(search) ? "" :
             "%" + search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%");

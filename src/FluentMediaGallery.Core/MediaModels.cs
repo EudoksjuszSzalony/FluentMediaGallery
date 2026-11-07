@@ -3,6 +3,7 @@ namespace FluentMediaGallery.Core;
 public enum MediaKind { Photo = 1, Video = 2 }
 
 public sealed record LibrarySource(long Id, string Root, bool IsOnline, string? LastScanUtc, string? LastError);
+public sealed record MediaLocation(long SourceId, string FolderPath, bool IsShortcut, bool IsNew);
 
 public sealed record MediaEntry(
     long Id,
