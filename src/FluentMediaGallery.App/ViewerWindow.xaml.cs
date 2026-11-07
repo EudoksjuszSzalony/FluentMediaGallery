@@ -44,11 +44,24 @@ public sealed partial class ViewerWindow : Window
     private bool _ready;
     private double _imageWidth;
     private double _imageHeight;
+    private double _fitScale = 1;
+    private double _currentPercent = 100;
+    private bool _fitToWindow = true;
+    private long _loadedPageStart = -1;
+    private int _selectedLocalIndex = -1;
+    private Storyboard? _previousFade;
+    private Storyboard? _nextFade;
 
     public ViewerWindow(LibraryDatabase database, FavoritesService favorites,
         ShellThumbnailCache thumbnailCache, GalleryViewContext context, Action onFavoriteChanged)
     {
         InitializeComponent();
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(TitleDragRegion);
+        AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        AppWindow.TitleBar.ButtonForegroundColor = Microsoft.UI.Colors.White;
+        AppWindow.TitleBar.ButtonHoverBackgroundColor = Microsoft.UI.ColorHelper.FromArgb(255, 65, 68, 74);
+        AppWindow.TitleBar.ButtonHoverForegroundColor = Microsoft.UI.Colors.White;
         _database = database;
         _favorites = favorites;
         _thumbnailCache = thumbnailCache;
@@ -83,19 +96,31 @@ public sealed partial class ViewerWindow : Window
         if (_total <= 0) return;
 
         var pageStart = (int)((_offset / PageSize) * PageSize);
-        var pageItems = await _database.GetPageAsync(pageStart, PageSize, _context.FavoritesOnly,
-            _context.Search, sourceId: _context.SourceId, folderPath: _context.FolderPath);
-        if (ticket != _loadVersion || !_ready) return;
-
-        _currentPage.Clear();
-        foreach (var item in pageItems) _currentPage.Add(new MediaRow(item));
+        // Keep the same MediaRow/BitmapImage objects while moving inside one page.
+        // Rebuilding the collection on every photo was causing the filmstrip to blink.
+        if (_loadedPageStart != pageStart)
+        {
+            var pageItems = await _database.GetPageAsync(pageStart, PageSize, _context.FavoritesOnly,
+                _context.Search, sourceId: _context.SourceId, folderPath: _context.FolderPath,
+                sortKey: _context.SortKey);
+            if (ticket != _loadVersion || !_ready) return;
+            _currentPage.Clear();
+            foreach (var item in pageItems) _currentPage.Add(new MediaRow(item));
+            _loadedPageStart = pageStart;
+            _selectedLocalIndex = -1;
+        }
         int localIndex = (int)(_offset - pageStart);
         if (localIndex < 0 || localIndex >= _currentPage.Count) return;
 
         _suppressFilmstrip = true;
         try
         {
-            Filmstrip.SelectedIndex = localIndex;
+            if (_selectedLocalIndex >= 0 && _selectedLocalIndex < _currentPage.Count)
+                _currentPage[_selectedLocalIndex].SetCurrent(false);
+            _selectedLocalIndex = localIndex;
+            _currentPage[localIndex].SetCurrent(true);
+            if (Filmstrip.SelectedIndex != localIndex)
+                Filmstrip.SelectedIndex = localIndex;
             Filmstrip.ScrollIntoView(_currentPage[localIndex]);
         }
         finally { _suppressFilmstrip = false; }
@@ -112,7 +137,9 @@ public sealed partial class ViewerWindow : Window
         ImageMessage.Text = "";
         FullImage.Source = null;
         LoadingIndicator.IsActive = true;
-        ResetZoom();
+        _imageWidth = 0;
+        _imageHeight = 0;
+        _fitToWindow = true;
 
         try
         {
@@ -170,51 +197,107 @@ public sealed partial class ViewerWindow : Window
         _imageWidth = bitmap.PixelWidth;
         _imageHeight = bitmap.PixelHeight;
         if (_imageWidth <= 0 || _imageHeight <= 0) return;
-        double w = Math.Max(320, ZoomScroll.ActualWidth - 16);
-        double h = Math.Max(240, ZoomScroll.ActualHeight - 16);
-        double scale = Math.Min(1.0, Math.Min(w / _imageWidth, h / _imageHeight));
-        FullImage.Width = Math.Max(1, Math.Round(_imageWidth * scale));
-        FullImage.Height = Math.Max(1, Math.Round(_imageHeight * scale));
+        RecalculateFit();
+        if (_fitToWindow) FitToWindow();
+        else ChangeZoom(_currentPercent, animate: false);
     }
 
-    private void ResetZoom()
+    private void PhotoSurface_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        ChangeZoom(100);
+        if (!_ready || _imageWidth <= 0 || _imageHeight <= 0) return;
+        RecalculateFit();
+        if (_fitToWindow) FitToWindow();
+        else ChangeZoom(_currentPercent, animate: false);
     }
 
-    private void ChangeZoom(double percentage)
+    private void RecalculateFit()
     {
-        var value = Math.Clamp(percentage, 25, 500);
+        if (_imageWidth <= 0 || _imageHeight <= 0) return;
+        // Use actual viewport size AFTER window layout. No minimum 320 px guessing.
+        var w = Math.Max(1, ZoomScroll.ActualWidth - 12);
+        var h = Math.Max(1, ZoomScroll.ActualHeight - 12);
+        _fitScale = Math.Min(w / _imageWidth, h / _imageHeight);
+        _fitScale = Math.Clamp(_fitScale, 0.001, 10);
+        FullImage.Width = Math.Max(1, _imageWidth * _fitScale);
+        FullImage.Height = Math.Max(1, _imageHeight * _fitScale);
+        ZoomScroll.MinZoomFactor = 0.05f;
+        ZoomScroll.MaxZoomFactor = 20f;
+    }
+
+    private void FitToWindow()
+    {
+        if (_imageWidth <= 0) return;
+        _fitToWindow = true;
+        ChangeZoom(100 * _fitScale, animate: true, fitting: true);
+    }
+
+    private void ChangeZoom(double percent, bool animate = true, bool fitting = false)
+    {
+        if (_imageWidth <= 0 || _imageHeight <= 0) return;
+        if (!fitting) _fitToWindow = false;
+        // Public percentage is relative to ORIGINAL pixels. Internal ScrollViewer
+        // factor is relative to the fit-sized image.
+        var target = Math.Clamp(percent / (100 * _fitScale), 0.05, 20);
+        _currentPercent = target * _fitScale * 100;
         _updatingZoom = true;
         try
         {
-            ZoomSlider.Value = value;
-            ZoomLabel.Text = $"{value:0}%";
-            ZoomScroll.ChangeView(null, null, (float)(value / 100d), true);
+            ZoomScroll.ChangeView(null, null, (float)target, disableAnimation: !animate);
+            var display = Math.Clamp(_currentPercent, ZoomSlider.Minimum, ZoomSlider.Maximum);
+            ZoomSlider.Value = display;
+            ZoomLabel.Text = $"{_currentPercent:0}%";
+            ZoomModeButton.Content = _fitToWindow ? "Dopasuj ✓" : "Dopasuj";
         }
         finally { _updatingZoom = false; }
     }
 
+    private void ResetZoom() => FitToWindow();
+
     private void ZoomSlider_ValueChanged(object sender,
         Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
-        if (!_ready || _updatingZoom) return;
+        if (!_ready || _updatingZoom || _imageWidth <= 0) return;
         ChangeZoom(e.NewValue);
     }
 
     private void ZoomScroll_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (!_ready || _updatingZoom) return;
-        var percent = ZoomScroll.ZoomFactor * 100;
+        if (!_ready || _updatingZoom || _imageWidth <= 0) return;
+        _currentPercent = ZoomScroll.ZoomFactor * _fitScale * 100;
         _updatingZoom = true;
-        ZoomSlider.Value = Math.Clamp(percent, 25, 500);
-        ZoomLabel.Text = $"{percent:0}%";
-        _updatingZoom = false;
+        try
+        {
+            ZoomSlider.Value = Math.Clamp(_currentPercent, ZoomSlider.Minimum, ZoomSlider.Maximum);
+            ZoomLabel.Text = $"{_currentPercent:0}%";
+            ZoomModeButton.Content = _fitToWindow ? "Dopasuj ✓" : "Dopasuj";
+        }
+        finally { _updatingZoom = false; }
     }
 
-    private void ZoomIn_Click(object sender, RoutedEventArgs e) => ChangeZoom(ZoomSlider.Value + 10);
-    private void ZoomOut_Click(object sender, RoutedEventArgs e) => ChangeZoom(ZoomSlider.Value - 10);
-    private void ZoomFit_Click(object sender, RoutedEventArgs e) => ChangeZoom(100);
+    private void ZoomModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_fitToWindow) ChangeZoom(100);
+        else FitToWindow();
+    }
+
+    private void ZoomFit_Click(object sender, RoutedEventArgs e) => FitToWindow();
+
+    // Fit is an actual stop between 25..500%, not a hardcoded 100% label.
+    private void ZoomStep(int direction)
+    {
+        if (_imageWidth <= 0) return;
+        var fit = Math.Round(_fitScale * 100);
+        var stops = new[] { 5d, 10, 15, 25, 33, 50, 67, 75, 100, 125, 150, 200, 250, 300, 400, 500, fit }
+            .Where(p => p >= 5 && p <= 500).Distinct().OrderBy(p => p).ToArray();
+        var next = direction > 0
+            ? stops.FirstOrDefault(p => p > _currentPercent + 0.5, stops[^1])
+            : stops.LastOrDefault(p => p < _currentPercent - 0.5, stops[0]);
+        if (Math.Abs(next - fit) < 0.5) FitToWindow();
+        else ChangeZoom(next);
+    }
+
+    private void ZoomIn_Click(object sender, RoutedEventArgs e) => ZoomStep(1);
+    private void ZoomOut_Click(object sender, RoutedEventArgs e) => ZoomStep(-1);
 
     private async Task NavigateAsync(int direction)
     {
@@ -240,7 +323,7 @@ public sealed partial class ViewerWindow : Window
     {
         _filmstripVisible = !_filmstripVisible;
         FilmstripBorder.Visibility = _filmstripVisible ? Visibility.Visible : Visibility.Collapsed;
-        FilmstripRow.Height = new GridLength(_filmstripVisible ? 112 : 0);
+        FilmstripRow.Height = new GridLength(_filmstripVisible ? 90 : 0);
         FilmstripButton.Content = _filmstripVisible ? "Ukryj pasek (F)" : "Pokaż pasek (F)";
     }
 
@@ -340,14 +423,14 @@ public sealed partial class ViewerWindow : Window
             case VirtualKey.Add:
                 if (ControlPressed())
                 {
-                    ChangeZoom(ZoomSlider.Value + 10);
+                    ZoomStep(1);
                     e.Handled = true;
                 }
                 break;
             case VirtualKey.Subtract:
                 if (ControlPressed())
                 {
-                    ChangeZoom(ZoomSlider.Value - 10);
+                    ZoomStep(-1);
                     e.Handled = true;
                 }
                 break;
@@ -379,29 +462,31 @@ public sealed partial class ViewerWindow : Window
         }
     }
 
-    private static void AnimateOpacity(UIElement target, double value)
+    private static void FadeButton(Button target, ref Storyboard? running, double opacity)
     {
+        // Stop prior animation; otherwise hover-out can replay stale flashes.
+        running?.Stop();
         var animation = new DoubleAnimation
         {
-            To = value,
-            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
-            EnableDependentAnimation = true
+            To = opacity,
+            Duration = new Duration(TimeSpan.FromMilliseconds(150))
         };
         Storyboard.SetTarget(animation, target);
         Storyboard.SetTargetProperty(animation, "Opacity");
         var storyboard = new Storyboard();
         storyboard.Children.Add(animation);
+        running = storyboard;
         storyboard.Begin();
     }
 
     private void PreviousPointerEntered(object sender, PointerRoutedEventArgs e)
-        => AnimateOpacity(PreviousButton, 0.92);
+        => FadeButton(PreviousButton, ref _previousFade, 1);
     private void PreviousPointerExited(object sender, PointerRoutedEventArgs e)
-        => AnimateOpacity(PreviousButton, 0);
+        => FadeButton(PreviousButton, ref _previousFade, 0);
     private void NextPointerEntered(object sender, PointerRoutedEventArgs e)
-        => AnimateOpacity(NextButton, 0.92);
+        => FadeButton(NextButton, ref _nextFade, 1);
     private void NextPointerExited(object sender, PointerRoutedEventArgs e)
-        => AnimateOpacity(NextButton, 0);
+        => FadeButton(NextButton, ref _nextFade, 0);
 
     private void CopyPath_Click(object sender, RoutedEventArgs e)
     {

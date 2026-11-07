@@ -6,12 +6,17 @@
     Title="FluentMediaGallery — Podgląd">
     <Grid x:Name="ViewerRoot" Background="#101114">
         <Grid.RowDefinitions>
-            <RowDefinition Height="58"/>
+            <RowDefinition Height="31"/>
+            <RowDefinition Height="38"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="48"/>
-            <RowDefinition x:Name="FilmstripRow" Height="112"/>
+            <RowDefinition Height="44"/>
+            <RowDefinition x:Name="FilmstripRow" Height="90"/>
         </Grid.RowDefinitions>
-        <Grid Grid.Row="0" Background="#222428" Padding="12,5" ColumnSpacing="8">
+        <Grid x:Name="TitleDragRegion" Grid.Row="0" Background="#202226" Padding="12,0,155,0">
+            <TextBlock Text="FluentMediaGallery" Foreground="#AEB6C0" FontSize="11"
+                       VerticalAlignment="Center"/>
+        </Grid>
+        <Grid Grid.Row="1" Background="#222428" Padding="9,2" ColumnSpacing="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -34,7 +39,8 @@
                     ToolTipService.ToolTip="Zamknij podgląd (Esc)"/>
         </Grid>
 
-        <Grid Grid.Row="1" x:Name="PhotoSurface" Background="#101114">
+        <Grid Grid.Row="2" x:Name="PhotoSurface" Background="#101114"
+              SizeChanged="PhotoSurface_SizeChanged">
             <Grid.ContextFlyout>
                 <MenuFlyout>
                     <MenuFlyoutItem Text="Dodaj/usuń z ulubionych (L)" Click="Favorite_Click"/>
@@ -49,9 +55,9 @@
                 </MenuFlyout>
             </Grid.ContextFlyout>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="60"/>
+                <ColumnDefinition Width="46"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="60"/>
+                <ColumnDefinition Width="46"/>
             </Grid.ColumnDefinitions>
             <ScrollViewer Grid.Column="1" x:Name="ZoomScroll" Background="Transparent"
                           HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
@@ -69,46 +75,52 @@
                        TextAlignment="Center" TextWrapping="Wrap"
                        VerticalAlignment="Bottom" HorizontalAlignment="Center"
                        Margin="20" MaxWidth="800"/>
-            <Button x:Name="PreviousButton" Grid.Column="0" Content="❮" FontSize="25"
-                    Opacity="0" BorderThickness="0" Background="#333333"
-                    VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
-                    PointerEntered="PreviousPointerEntered" PointerExited="PreviousPointerExited"
-                    Click="Previous_Click"/>
-            <Button x:Name="NextButton" Grid.Column="2" Content="❯" FontSize="25"
-                    Opacity="0" BorderThickness="0" Background="#333333"
-                    VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
-                    PointerEntered="NextPointerEntered" PointerExited="NextPointerExited"
-                    Click="Next_Click"/>
+            <Grid Grid.Column="0" Background="Transparent"
+                  PointerEntered="PreviousPointerEntered" PointerExited="PreviousPointerExited">
+                <Button x:Name="PreviousButton" Content="❮" FontSize="18"
+                        Width="34" Height="50" Opacity="0" CornerRadius="7"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Click="Previous_Click"/>
+            </Grid>
+            <Grid Grid.Column="2" Background="Transparent"
+                  PointerEntered="NextPointerEntered" PointerExited="NextPointerExited">
+                <Button x:Name="NextButton" Content="❯" FontSize="18"
+                        Width="34" Height="50" Opacity="0" CornerRadius="7"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Click="Next_Click"/>
+            </Grid>
         </Grid>
 
-        <Grid Grid.Row="2" Background="#202226" Padding="12,3" ColumnSpacing="9">
+        <Grid Grid.Row="3" Background="#202226" Padding="10,2" ColumnSpacing="5">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="210"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="170"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Button Grid.Column="0" Content="−" FontSize="18" Click="ZoomOut_Click"
-                    AutomationProperties.Name="Pomniejsz"/>
-            <TextBlock Grid.Column="1" x:Name="ZoomLabel" Text="100%"
-                       FontSize="12" Foreground="White" Width="45"
+            <TextBlock Grid.Column="0" x:Name="Status" Text=""
+                       Foreground="#A9B4BF" VerticalAlignment="Center" FontSize="10"
+                       TextTrimming="CharacterEllipsis" Margin="0,0,14,0"/>
+            <Button Grid.Column="1" x:Name="ZoomModeButton" Content="Dopasuj"
+                    Click="ZoomModeButton_Click" Padding="8,3"
+                    ToolTipService.ToolTip="Przełącz między dopasowaniem do okna i 100% oryginału"/>
+            <Button Grid.Column="2" Content="−" FontSize="17" Click="ZoomOut_Click" Padding="7,0"/>
+            <TextBlock Grid.Column="3" x:Name="ZoomLabel" Text="—"
+                       FontSize="11" Foreground="White" Width="48"
                        VerticalAlignment="Center" TextAlignment="Center"/>
-            <Slider Grid.Column="2" x:Name="ZoomSlider" Minimum="25" Maximum="500"
-                    StepFrequency="5" Value="100" VerticalAlignment="Center"
+            <Slider Grid.Column="4" x:Name="ZoomSlider" Minimum="5" Maximum="500"
+                    StepFrequency="1" Value="100" VerticalAlignment="Center"
                     ValueChanged="ZoomSlider_ValueChanged"
-                    AutomationProperties.Name="Powiększenie zdjęcia"/>
-            <TextBlock Grid.Column="3" x:Name="Status" Text=""
-                       Foreground="#B7BEC7" VerticalAlignment="Center" FontSize="11"
-                       TextTrimming="CharacterEllipsis" Margin="12,0,0,0"/>
-            <Button Grid.Column="4" Content="+" FontSize="18" Click="ZoomIn_Click"
-                    AutomationProperties.Name="Powiększ"/>
+                    AutomationProperties.Name="Powiększenie w procentach oryginalnego obrazu"/>
+            <Button Grid.Column="5" Content="+" FontSize="17" Click="ZoomIn_Click" Padding="7,0"/>
         </Grid>
 
-        <Border Grid.Row="3" x:Name="FilmstripBorder" Background="#202226"
-                Padding="9,6">
+        <Border Grid.Row="4" x:Name="FilmstripBorder" Background="#202226"
+                Padding="5,2">
             <Grid>
-                <ListView x:Name="Filmstrip" Height="92" SelectionMode="Single"
+                <ListView x:Name="Filmstrip" Height="82" SelectionMode="Single"
                           SelectionChanged="Filmstrip_SelectionChanged"
                           ContainerContentChanging="Filmstrip_ContainerContentChanging"
                           ScrollViewer.HorizontalScrollMode="Enabled"
@@ -122,10 +134,12 @@
                     </ListView.ItemsPanel>
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <Grid Width="104" Height="78" Margin="2">
+                            <Grid Width="86" Height="75" Margin="1">
                                 <Border Background="#32353A" CornerRadius="6"/>
-                                <Image Source="{Binding Thumbnail}" Width="100" Height="75"
+                                <Image Source="{Binding Thumbnail}" Width="84" Height="73"
                                        Stretch="UniformToFill"/>
+                                <Border Width="3" Background="#48BFFF" Opacity="{Binding SelectionOpacity}"
+                                        HorizontalAlignment="Left" VerticalAlignment="Stretch"/>
                                 <TextBlock Text="{Binding TypeMark}" HorizontalAlignment="Right"
                                            VerticalAlignment="Bottom" Foreground="White" Margin="4"/>
                                 <TextBlock Text="{Binding Heart}" HorizontalAlignment="Right"

@@ -28,7 +28,24 @@ public sealed class MediaRow : INotifyPropertyChanged
     private bool _loadingStarted;
     private BitmapImage? _thumbnail;
 
-    public MediaEntry Entry { get; }
+    private double _selectionOpacity;
+    public double SelectionOpacity => _selectionOpacity;
+
+    public void SetCurrent(bool value)
+    {
+        var next = value ? 1d : 0d;
+        if (_selectionOpacity == next) return;
+        _selectionOpacity = next;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectionOpacity)));
+    }
+
+    public MediaEntry Entry { get; private set; }
+
+    public void UpdateEntry(MediaEntry updated)
+    {
+        Entry = updated;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Heart)));
+    }
     public string Name => Entry.Name;
     public string Description => Entry.Kind == MediaKind.Video ? "Film" : "Zdjęcie";
     public string TypeMark => Entry.Kind == MediaKind.Video ? "▶" : "▧";

@@ -16,7 +16,7 @@ public sealed class ShellThumbnailCache
     private const long MaxCacheBytes = 2L * 1024 * 1024 * 1024;
     private const int ImageEdge = 320;
     private const uint ThumbnailOnly = 0x00000008;
-    private readonly SemaphoreSlim _workers = new(3, 3);
+    private readonly SemaphoreSlim _workers = new(5, 5);
     private readonly SemaphoreSlim _pruneGuard = new(1, 1);
     private int _created;
 
