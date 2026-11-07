@@ -224,7 +224,7 @@ public sealed partial class ViewerWindow : Window
         _fitScale = Math.Clamp(_fitScale, 0.001, 10);
         FullImage.Width = Math.Max(1, _imageWidth * _fitScale);
         FullImage.Height = Math.Max(1, _imageHeight * _fitScale);
-        ZoomScroll.MinZoomFactor = 0.05f;
+        ZoomScroll.MinZoomFactor = 0.1f;
         ZoomScroll.MaxZoomFactor = 20f;
     }
 
@@ -241,7 +241,7 @@ public sealed partial class ViewerWindow : Window
         if (!fitting) _fitToWindow = false;
         // Public percentage is relative to ORIGINAL pixels. Internal ScrollViewer
         // factor is relative to the fit-sized image.
-        var target = Math.Clamp(percent / (100 * _fitScale), 0.05, 20);
+        var target = Math.Clamp(percent / (100 * _fitScale), 0.1, 20);
         _currentPercent = target * _fitScale * 100;
         _updatingZoom = true;
         try
