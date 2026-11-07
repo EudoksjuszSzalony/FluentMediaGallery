@@ -71,7 +71,7 @@
             <ScrollViewer Grid.Column="1" x:Name="ZoomScroll" Background="Transparent"
                           HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                           HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                          ZoomMode="Enabled" MinZoomFactor="0.1" MaxZoomFactor="20"
+                          ZoomMode="Enabled" MinZoomFactor="0.1" MaxZoomFactor="10"
                           HorizontalScrollMode="Auto" VerticalScrollMode="Auto"
                           HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                           ViewChanged="ZoomScroll_ViewChanged">

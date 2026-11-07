@@ -46,6 +46,9 @@ public sealed partial class ViewerWindow : Window
     private double _imageWidth;
     private double _imageHeight;
     private double _fitScale = 1;
+    // The image's layout size is 50% of decoded pixels. This permits 5–500%
+    // real zoom while keeping WinUI ScrollViewer.zoomFactor within [0.1, 10].
+    private const double ImageBaseScale = 0.5;
     private double _currentPercent = 100;
     private bool _fitToWindow = true;
     private long _loadedPageStart = -1;
@@ -231,10 +234,8 @@ public sealed partial class ViewerWindow : Window
             ? ZoomScroll.ActualHeight - 12 : Math.Max(240, AppWindow.Size.Height - 235);
         _fitScale = Math.Min(w / _imageWidth, h / _imageHeight);
         _fitScale = Math.Clamp(_fitScale, 0.001, 10);
-        FullImage.Width = Math.Max(1, _imageWidth * _fitScale);
-        FullImage.Height = Math.Max(1, _imageHeight * _fitScale);
-        ZoomScroll.MinZoomFactor = 0.1f;
-        ZoomScroll.MaxZoomFactor = 20f;
+        FullImage.Width = Math.Max(1, _imageWidth * ImageBaseScale);
+        FullImage.Height = Math.Max(1, _imageHeight * ImageBaseScale);
     }
 
     private void FitToWindow()
@@ -248,10 +249,10 @@ public sealed partial class ViewerWindow : Window
     {
         if (_imageWidth <= 0 || _imageHeight <= 0) return;
         if (!fitting) _fitToWindow = false;
-        // Public percentage is relative to ORIGINAL pixels. Internal ScrollViewer
-        // factor is relative to the fit-sized image.
-        var target = Math.Clamp(percent / (100 * _fitScale), 0.1, 20);
-        _currentPercent = target * _fitScale * 100;
+        // Public percentage is relative to decoded image pixels. Internal
+        // ScrollViewer factor is relative to the half-size layout image.
+        var target = Math.Clamp(percent / (100 * ImageBaseScale), 0.1, 10);
+        _currentPercent = target * ImageBaseScale * 100;
         _updatingZoom = true;
         try
         {
@@ -276,7 +277,7 @@ public sealed partial class ViewerWindow : Window
     private void ZoomScroll_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
     {
         if (!_ready || _updatingZoom || _imageWidth <= 0) return;
-        _currentPercent = ZoomScroll.ZoomFactor * _fitScale * 100;
+        _currentPercent = ZoomScroll.ZoomFactor * ImageBaseScale * 100;
         _updatingZoom = true;
         try
         {
