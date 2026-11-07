@@ -45,3 +45,11 @@ No push or pull_request workflows during development. Use local tests; reserve A
 - Source-aware DB queries support page filtering, favorites filter, filename search and count. Manual classification import via bounded batches is provided; does not run on app startup.
 - Explicit favorite button writes SQLite first and then tries to persist System.Rating, after one-time in-app warning. Test ONLY against copied source media until validated.
 - Next phase: reliable WinUI build, virtualized thumbnail tiles, local cache, in-app viewer, sources UI, video player and safe watcher/SMB reconciliation.
+
+## Thumbnail stage (2026-11-07)
+
+- GridView ItemsWrapGrid virtualizes realized items; ContainerContentChanging triggers thumbnail generation only as items appear.
+- `ShellThumbnailCache` calls Windows Shell `IShellItemImageFactory` with `SIIGBF_THUMBNAILONLY` from background thread, limiting extraction to 3 tasks. Windows Property/thumbnail handlers determine supported photos/videos; missing unsupported formats retain placeholders.
+- A 320 px PNG is persisted at `%LOCALAPPDATA%/FluentMediaGallery/Thumbnails/v1/` keyed by SHA256 of path, source size, modified ticks and thumbnail-edge version. Cache prune runs after every 128 newly created thumbnails and attempts a max 2 GiB cap. Not a production-tested LRU, more advanced invalidation and cancellation planned.
+- Extracted Shell HBITMAP converted with `System.Drawing.Common 10.0.12` (Windows-only), and GDI bitmap released with `DeleteObject`. No media writes.
+- **Not yet compiled/tested at this stage**. Verify shell/COM extraction under Dominator and UNC case with COPY-only small test folders.
