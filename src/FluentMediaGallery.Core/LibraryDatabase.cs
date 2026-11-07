@@ -550,6 +550,36 @@ public sealed class LibraryDatabase
     /// <summary>
     /// Counts rows matching the same filters as GetPageAsync without loading media objects.
     /// </summary>
+    public async Task<(long Minimum, long Maximum)> GetDateRangeAsync(long? sourceId = null,
+        bool favoritesOnly = false, string? search = null,
+        string? folderPath = null, bool creationDate = false,
+        CancellationToken ct = default)
+    {
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        var column = creationDate
+            ? "CASE WHEN created_ticks=0 THEN modified_ticks ELSE created_ticks END"
+            : "modified_ticks";
+        cmd.CommandText = $"""
+            SELECT MIN({column}),MAX({column}) FROM media WHERE missing=0
+              AND ($source=0 OR source_id=$source)
+              AND ($folder='' OR path LIKE $folder ESCAPE '\')
+              AND ($favorites=0 OR COALESCE(favorite_override,
+                CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END)=1)
+              AND ($search='' OR file_name LIKE $search ESCAPE '\');
+            """;
+        cmd.Parameters.AddWithValue("$source", sourceId.GetValueOrDefault());
+        cmd.Parameters.AddWithValue("$folder", folderPath is null ? "" :
+            EscapeLike(NormalizeFolder(folderPath).TrimEnd(Path.DirectorySeparatorChar) +
+            Path.DirectorySeparatorChar) + "%");
+        cmd.Parameters.AddWithValue("$favorites", favoritesOnly ? 1 : 0);
+        cmd.Parameters.AddWithValue("$search", string.IsNullOrWhiteSpace(search) ? "" :
+            "%" + EscapeLike(search) + "%");
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct) || reader.IsDBNull(0)) return (0, 0);
+        return (reader.GetInt64(0), reader.GetInt64(1));
+    }
+
     public async Task<long> CountFilteredAsync(long? sourceId = null,
         bool favoritesOnly = false, string? search = null, CancellationToken ct = default,
         string? folderPath = null)
