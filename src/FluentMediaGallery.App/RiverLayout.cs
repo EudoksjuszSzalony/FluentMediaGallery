@@ -65,7 +65,14 @@ public static class RiverLayout
                 (regular is null || featured.Cost < regular.Cost + 1.0);
 
             var selected = useFeatured ? featured! : regular ?? featured;
-            if (selected is null) break;
+            if (selected is null)
+            {
+                // Last, extremely portrait-oriented item: never discard it.
+                var height = TargetRowHeight;
+                selected = new Band(1, height, 2,
+                    new[] { new Placement(0, 0, 0,
+                        Math.Min(width, ratios[offset] * height), height) });
+            }
 
             var tiles = selected.Placements.Select(p =>
                 new RiverTile(items[offset + p.Index],

@@ -262,7 +262,7 @@ public sealed partial class ViewerWindow : Window
         _imageHeight = bitmap.PixelHeight;
         if (_imageWidth <= 0 || _imageHeight <= 0) return;
         RecalculateFit();
-        if (_fitToWindow) FitToWindow();
+        if (_fitToWindow) FitToWindow(animate: false);
         else ChangeZoom(_currentPercent, animate: false);
         // Retry after the image's layout pass: ChangeView can be rejected when
         // the ScrollViewer has not measured its new content yet.
@@ -271,7 +271,7 @@ public sealed partial class ViewerWindow : Window
             if (!_ready || !ReferenceEquals(FullImage.Source, bitmap) || !_fitToWindow)
                 return;
             RecalculateFit();
-            FitToWindow();
+            FitToWindow(animate: false);
         });
     }
 
@@ -316,11 +316,11 @@ public sealed partial class ViewerWindow : Window
         FullImage.Height = Math.Max(1, _imageHeight * ImageBaseScale);
     }
 
-    private void FitToWindow()
+    private void FitToWindow(bool animate = true)
     {
         if (_imageWidth <= 0) return;
         _fitToWindow = true;
-        ChangeZoom(100 * _fitScale, animate: true, fitting: true);
+        ChangeZoom(100 * _fitScale, animate: animate, fitting: true);
     }
 
     private void ChangeZoom(double percent, bool animate = true, bool fitting = false)
