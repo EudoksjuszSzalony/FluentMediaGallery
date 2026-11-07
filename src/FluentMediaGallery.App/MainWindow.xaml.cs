@@ -269,7 +269,10 @@ public sealed partial class MainWindow : Window
             return false;
         for (var i = 0; i < a.Tiles.Count; i++)
         {
-            if (a.Tiles[i].Media.Entry.Id != b.Tiles[i].Media.Entry.Id ||
+            // An identical media ID is not enough: after a view reload the
+            // previous MediaRow (and its thumbnail work) is canceled. Reuse
+            // rows only when they still reference the SAME live MediaRow.
+            if (!ReferenceEquals(a.Tiles[i].Media, b.Tiles[i].Media) ||
                 a.Tiles[i].Left != b.Tiles[i].Left ||
                 a.Tiles[i].Top != b.Tiles[i].Top ||
                 a.Tiles[i].ImageWidth != b.Tiles[i].ImageWidth ||
