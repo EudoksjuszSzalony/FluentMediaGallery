@@ -338,7 +338,8 @@ public sealed class LibraryDatabase
         return (reader.GetInt64(0) != 0, reader.IsDBNull(1) ? null : reader.GetString(1));
     }
 
-    public async Task<IReadOnlyList<RatingCandidate>> GetPendingRatingsAsync(int limit = 64, CancellationToken ct = default)
+    public async Task<IReadOnlyList<RatingCandidate>> GetPendingRatingsAsync(int limit = 64, CancellationToken ct = default,
+        long? sourceId = null)
     {
         var result = new List<RatingCandidate>();
         await using var connection = await OpenAsync(ct);
@@ -346,8 +347,10 @@ public sealed class LibraryDatabase
         cmd.CommandText = """
             SELECT m.id,m.path FROM media m JOIN sources s ON m.source_id=s.id
             WHERE m.rating_checked=0 AND m.missing=0 AND s.is_online=1
+              AND ($source=0 OR m.source_id=$source)
             ORDER BY m.id LIMIT $limit;
             """;
+        cmd.Parameters.AddWithValue("$source", sourceId.GetValueOrDefault());
         cmd.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 256));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct)) result.Add(new RatingCandidate(reader.GetInt64(0), reader.GetString(1)));

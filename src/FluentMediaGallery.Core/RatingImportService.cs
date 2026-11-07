@@ -6,9 +6,10 @@ namespace FluentMediaGallery.Core;
 /// </summary>
 public sealed class RatingImportService(LibraryDatabase database, ShellRatingReader reader)
 {
-    public async Task<int> ImportNextBatchAsync(int maximum = 64, CancellationToken ct = default)
+    public async Task<int> ImportNextBatchAsync(int maximum = 64, CancellationToken ct = default,
+        long? sourceId = null)
     {
-        var candidates = await database.GetPendingRatingsAsync(maximum, ct);
+        var candidates = await database.GetPendingRatingsAsync(maximum, ct, sourceId);
         var imported = 0;
         foreach (var item in candidates)
         {
