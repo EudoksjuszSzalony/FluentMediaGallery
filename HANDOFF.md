@@ -272,3 +272,7 @@ NEXT STEPS:
 
 ### Known implementation boundary
 - Each media source is queried only if explicitly registered; browse/thumbnail jobs on a disconnected NAS may still be delayed by OS filesystem calls. Missing/unreadable source yields visual placeholder, not DB removal. The new schema is additive but requires startup migration, so keep an SQLite backup before first user test.
+
+### Additional migration regression gate (same stage)
+- `00b7a7b`: Core.Smoke now creates a **legacy SQLite library with preexisting 4★ photo** and WITHOUT the new pixel_width/pixel_height columns, then runs `InitializeAsync` twice. It checks that the migration is additive, existing favorite and rating remain unchanged, and cached dimensions persist after reinitialization. This test source is committed but has **not yet been executed on Windows** by the assistant; user should run full Core.Smoke on Dominator before launching the migrated GUI DB.
+- The recommended USER test script should first close all FluentMediaGallery windows and copy `%LOCALAPPDATA%\FluentMediaGallery\library.sqlite` plus any `-wal`/`-shm` siblings to a timestamped backup folder, then run the existing repo fail-fast build script (fetch develop/build), Core.Smoke, and start the app only after both succeed. Never delete the backup after validation automatically.
