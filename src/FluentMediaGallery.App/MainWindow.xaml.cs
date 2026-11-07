@@ -17,6 +17,9 @@ public sealed partial class MainWindow : Window
     private readonly RatingImportService _ratingImporter;
     private readonly FavoritesService _favorites;
     private readonly ObservableCollection<SourceRow> _sources = new();
+    private readonly ObservableCollection<FolderNodeRow> _folderRows = new();
+    private readonly HashSet<string> _expandedFolders = new(StringComparer.OrdinalIgnoreCase);
+    private string? _selectedFolderPath;
     private readonly ObservableCollection<MediaRow> _rows = new();
     private readonly ShellThumbnailCache _thumbnailCache = new();
     private readonly DispatcherQueue _uiDispatcher;
@@ -39,7 +42,7 @@ public sealed partial class MainWindow : Window
         _favorites = new FavoritesService(_database, new ShellRatingReader(), new ShellRatingWriter());
         _uiDispatcher = DispatcherQueue.GetForCurrentThread();
 
-        SourceItems.ItemsSource = _sources;
+        SourceItems.ItemsSource = _folderRows;
         MediaItems.ItemsSource = _rows;
         ViewerFilmstrip.ItemsSource = _rows;
         LayoutRoot.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Viewer_KeyDown), true);
@@ -72,12 +75,51 @@ public sealed partial class MainWindow : Window
         _sources.Clear();
         foreach (var source in sources) _sources.Add(new SourceRow(source));
         if (_selectedSourceId.HasValue && sources.All(s => s.Id != _selectedSourceId))
+        {
             _selectedSourceId = null;
+            _selectedFolderPath = null;
+        }
+
+        await ReloadFolderTreeAsync();
         UpdateHeader();
+    }
+
+    private async Task ReloadFolderTreeAsync()
+    {
+        var rows = new List<FolderNodeRow>();
+        foreach (var root in _sources)
+            await AppendFolderAsync(rows, root.Source.Id, root.Source.Root, 0,
+                isRoot: true, root.Status);
+
+        var shortcuts = await _database.ListShortcutsAsync();
+        foreach (var shortcut in shortcuts)
+            rows.Add(new FolderNodeRow(shortcut.SourceId, shortcut.FolderPath, 0,
+                false, true, false, "Skrót · ten sam indeks"));
+
+        _folderRows.Clear();
+        foreach (var row in rows) _folderRows.Add(row);
+    }
+
+    private async Task AppendFolderAsync(List<FolderNodeRow> rows, long sourceId,
+        string folder, int depth, bool isRoot, string status)
+    {
+        var expanded = _expandedFolders.Contains(folder);
+        rows.Add(new FolderNodeRow(sourceId, folder, depth, isRoot, false, expanded,
+            status));
+        if (!expanded || depth >= 20) return;
+
+        var children = await _database.GetIndexedChildFoldersAsync(sourceId, folder);
+        foreach (var child in children)
+            await AppendFolderAsync(rows, sourceId, child, depth + 1, false, "");
     }
 
     private void UpdateHeader()
     {
+        if (_selectedFolderPath is not null)
+        {
+            HeaderTitle.Text = Path.GetFileName(_selectedFolderPath.TrimEnd('\\'));
+            return;
+        }
         var selected = _sources.FirstOrDefault(s => s.Source.Id == _selectedSourceId);
         HeaderTitle.Text = selected?.Title ?? "Wszystkie media";
     }
@@ -91,12 +133,13 @@ public sealed partial class MainWindow : Window
             var search = SearchBox.Text.Trim();
             var favoritesOnly = FavoritesOnly.IsChecked == true;
             var source = _selectedSourceId;
+            var folder = _selectedFolderPath;
 
-            var count = await _database.CountFilteredAsync(source, favoritesOnly, search);
+            var count = await _database.CountFilteredAsync(source, favoritesOnly, search, folderPath: folder);
             var maxPage = count == 0 ? 0 : (int)((count - 1) / PageSize);
             if (_currentPage > maxPage) _currentPage = maxPage;
             var page = await _database.GetPageAsync(
-                _currentPage * PageSize, PageSize, favoritesOnly, search, sourceId: source);
+                _currentPage * PageSize, PageSize, favoritesOnly, search, sourceId: source, folderPath: folder);
             if (version != _queryVersion) return;
 
             _matchedCount = count;
@@ -117,35 +160,67 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async Task RegisterLocationAsync(string path)
+    {
+        var registered = await _database.RegisterLocationAsync(path);
+        _selectedSourceId = registered.SourceId;
+        _selectedFolderPath = registered.IsShortcut ? registered.FolderPath : null;
+        _currentPage = 0;
+        SourcePath.Text = "";
+        await ReloadSourcesAsync();
+        await LoadPageAsync();
+        OperationStatus.Text = registered.IsShortcut
+            ? "Dodano skrót podfolderu bez ponownego indeksowania. Rozwiń źródło po lewej stronie."
+            : registered.IsNew
+                ? "Folder dodany. Uruchom indeksowanie wybranego źródła."
+                : "Ten folder jest już w bibliotece.";
+    }
+
     private async void AddSource_Click(object sender, RoutedEventArgs e)
     {
         if (!_isReady || _activeOperation is not null) return;
         try
         {
-            var input = SourcePath.Text.Trim();
-            if (string.IsNullOrWhiteSpace(input) || !Path.IsPathFullyQualified(input))
-            {
-                OperationStatus.Text = "Podaj pełną ścieżkę, np. D:\\Zdjęcia lub \\\\serwer\\udział\\zdjęcia.";
-                return;
-            }
-
-            var source = await _database.AddSourceAsync(input);
-            _selectedSourceId = source.Id;
-            _currentPage = 0;
-            SourcePath.Text = "";
-            await ReloadSourcesAsync();
-            await LoadPageAsync();
-            OperationStatus.Text = "Folder zarejestrowany. Kliknij „Indeksuj wybrany folder”, aby odczytać pliki.";
+            await RegisterLocationAsync(SourcePath.Text.Trim());
         }
         catch (Exception ex)
         {
-            OperationStatus.Text = "Błąd dodawania folderu: " + ex.Message;
+            OperationStatus.Text = "Błąd dodawania lokalizacji: " + ex.Message;
         }
+    }
+
+    private async void BrowseSource_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_isReady || _activeOperation is not null) return;
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FolderPicker();
+            picker.FileTypeFilter.Add("*");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker,
+                WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder is null) return;
+            await RegisterLocationAsync(folder.Path);
+        }
+        catch (Exception ex)
+        {
+            OperationStatus.Text = "Nie udało się wybrać folderu: " + ex.Message;
+        }
+    }
+
+    private async void FolderToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: FolderNodeRow folder } || folder.IsShortcut)
+            return;
+        if (!_expandedFolders.Add(folder.Path))
+            _expandedFolders.Remove(folder.Path);
+        await ReloadFolderTreeAsync();
     }
 
     private async void AllSources_Click(object sender, RoutedEventArgs e)
     {
         _selectedSourceId = null;
+        _selectedFolderPath = null;
         _currentPage = 0;
         UpdateHeader();
         await LoadPageAsync();
@@ -153,8 +228,9 @@ public sealed partial class MainWindow : Window
 
     private async void SourceItems_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is not SourceRow row) return;
-        _selectedSourceId = row.Source.Id;
+        if (e.ClickedItem is not FolderNodeRow row) return;
+        _selectedSourceId = row.SourceId;
+        _selectedFolderPath = row.IsRoot ? null : row.Path;
         _currentPage = 0;
         UpdateHeader();
         await LoadPageAsync();
@@ -386,6 +462,7 @@ public sealed partial class MainWindow : Window
         ScanButton.IsEnabled = !active;
         RatingButton.IsEnabled = !active;
         AddSourceButton.IsEnabled = !active;
+        BrowseSourceButton.IsEnabled = !active;
         CancelButton.IsEnabled = active;
         ScanProgress.IsIndeterminate = active;
     }

@@ -87,3 +87,31 @@ public sealed class MediaRow : INotifyPropertyChanged
         }
     }
 }
+
+public sealed class FolderNodeRow
+{
+    public long SourceId { get; }
+    public string Path { get; }
+    public bool IsShortcut { get; }
+    public bool IsRoot { get; }
+    public int Depth { get; }
+    public string DisplayTitle { get; }
+    public string Status { get; }
+    public string Chevron { get; }
+    public Microsoft.UI.Xaml.Thickness Indent { get; }
+
+    public FolderNodeRow(long sourceId, string path, int depth, bool isRoot,
+        bool isShortcut, bool expanded, string status)
+    {
+        SourceId = sourceId;
+        Path = path;
+        IsRoot = isRoot;
+        IsShortcut = isShortcut;
+        Depth = depth;
+        DisplayTitle = (isShortcut ? "↗ " : "📁 ") +
+            (System.IO.Path.GetFileName(path.TrimEnd('\\')) is { Length: > 0 } name ? name : path);
+        Status = status;
+        Chevron = isShortcut ? " " : expanded ? "▾" : "▸";
+        Indent = new Microsoft.UI.Xaml.Thickness(Math.Min(11 * depth, 88), 0, 0, 0);
+    }
+}
