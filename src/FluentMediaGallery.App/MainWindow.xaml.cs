@@ -119,8 +119,33 @@ public sealed partial class MainWindow : Window
             rows.Add(new FolderNodeRow(shortcut.SourceId, shortcut.FolderPath, 0,
                 false, true, false, "Skrót · ten sam indeks"));
 
-        _folderRows.Clear();
-        foreach (var row in rows) _folderRows.Add(row);
+        // Keep existing containers in place. New or removed descendants receive
+        // native AddDeleteThemeTransition/RepositionThemeTransition animations.
+        static bool SameNode(FolderNodeRow a, FolderNodeRow b) =>
+            a.SourceId == b.SourceId && a.IsRoot == b.IsRoot &&
+            a.IsShortcut == b.IsShortcut && a.Depth == b.Depth &&
+            string.Equals(a.Path, b.Path, StringComparison.OrdinalIgnoreCase);
+
+        var prefix = 0;
+        while (prefix < _folderRows.Count && prefix < rows.Count &&
+               SameNode(_folderRows[prefix], rows[prefix]))
+        {
+            if (_folderRows[prefix].Chevron != rows[prefix].Chevron ||
+                _folderRows[prefix].Status != rows[prefix].Status)
+                _folderRows[prefix] = rows[prefix];
+            prefix++;
+        }
+        var suffix = 0;
+        while (suffix < _folderRows.Count - prefix &&
+               suffix < rows.Count - prefix &&
+               SameNode(_folderRows[_folderRows.Count - 1 - suffix],
+                   rows[rows.Count - 1 - suffix]))
+            suffix++;
+
+        while (_folderRows.Count > prefix + suffix)
+            _folderRows.RemoveAt(prefix);
+        for (var i = prefix; i < rows.Count - suffix; i++)
+            _folderRows.Insert(i, rows[i]);
     }
 
     private async Task AppendFolderAsync(List<FolderNodeRow> rows, long sourceId,
@@ -491,7 +516,7 @@ public sealed partial class MainWindow : Window
     {
         if (!_resizingSidebar) return;
         var x = e.GetCurrentPoint(LayoutRoot).Position.X;
-        SidebarColumn.Width = new GridLength(Math.Clamp(x, 190, 560));
+        SidebarColumn.Width = new GridLength(Math.Clamp(x, 175, 500));
     }
 
     private void SidebarGrip_PointerReleased(object sender, PointerRoutedEventArgs e)

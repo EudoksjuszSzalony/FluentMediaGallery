@@ -10,7 +10,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="SidebarColumn" Width="270" MinWidth="190" MaxWidth="560"/>
+            <ColumnDefinition x:Name="SidebarColumn" Width="220" MinWidth="175" MaxWidth="500"/>
             <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="0"/>
@@ -43,7 +43,7 @@
         <!-- Sources are user-selected only; no automatic Pictures/SMB discovery. -->
         <Border Grid.Row="1" Grid.Column="0" BorderThickness="0,0,1,0"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-            <Grid Padding="16">
+            <Grid Padding="9,9,9,5">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -51,37 +51,56 @@
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <StackPanel Spacing="6" Margin="0,4,0,16">
-                    <TextBlock Text="FluentMediaGallery" FontSize="21" FontWeight="SemiBold"/>
-                    <TextBlock Text="Biblioteka lokalna i sieciowa"
+                <StackPanel Spacing="1" Margin="0,1,0,4">
+                    <TextBlock Text="Biblioteka" FontSize="12" FontWeight="SemiBold"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
-                <Button Grid.Row="1" Content="Wszystkie media" HorizontalAlignment="Stretch"
+                <Button Grid.Row="1" Content="▧  Galeria" HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Left" Click="AllSources_Click"
-                        Margin="0,0,0,12"/>
-                <TextBlock Grid.Row="2" Text="Wybrane foldery" FontWeight="SemiBold"
-                           Margin="0,0,0,8"/>
+                        Margin="0,0,0,6" FontSize="12" Padding="9,6"/>
+                <TextBlock Grid.Row="2" Text="Wybrane foldery" FontSize="12"
+                           FontWeight="SemiBold" Margin="3,6,0,5"/>
                 <!-- Lazy, SQLite-backed folder navigation; no recursive file system access. -->
                 <ListView Grid.Row="3" x:Name="SourceItems" IsItemClickEnabled="True"
                           ItemClick="SourceItems_ItemClick" SelectionMode="None"
                           HorizontalContentAlignment="Stretch">
+                    <ListView.ItemContainerTransitions>
+                        <TransitionCollection>
+                            <AddDeleteThemeTransition/>
+                            <RepositionThemeTransition IsStaggeringEnabled="False"/>
+                        </TransitionCollection>
+                    </ListView.ItemContainerTransitions>
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="MinHeight" Value="0"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="{Binding Indent}" Padding="2,2">
+                            <Grid Margin="{Binding Indent}" Padding="2,1" MinHeight="27">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="22"/>
                                 </Grid.ColumnDefinitions>
                                 <Button Grid.Column="1" Content="{Binding Chevron}"
                                         Tag="{Binding}" Click="FolderToggle_Click"
                                         Padding="2" FontSize="12" BorderThickness="0"
                                         VerticalAlignment="Center" HorizontalAlignment="Stretch"
                                         Background="Transparent"/>
-                                <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center"
+                                <StackPanel Grid.Column="0" Spacing="1" VerticalAlignment="Center"
                                             HorizontalAlignment="Stretch">
-                                    <TextBlock Text="{Binding DisplayTitle}"
-                                               TextTrimming="CharacterEllipsis" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{Binding Status}" FontSize="11"
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE8B7;" FontSize="13"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        <TextBlock Text="{Binding DisplayTitle}" FontSize="12"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Status}" FontSize="10"
+                                               Visibility="{Binding StatusVisibility}"
                                                TextTrimming="CharacterEllipsis"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                 </StackPanel>
@@ -89,8 +108,8 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
-                <StackPanel Grid.Row="4" Spacing="8" Margin="0,12,0,4">
-                    <TextBlock Text="Dodaj lokalizację" FontWeight="SemiBold"/>
+                <StackPanel Grid.Row="4" Spacing="5" Margin="0,6,0,2">
+                    <TextBlock Text="Dodaj lokalizację" FontSize="12" FontWeight="SemiBold"/>
                     <Grid ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -110,8 +129,8 @@
                     </Grid>
                     <Button x:Name="AddSourceButton" Content="Dodaj wskazaną lokalizację"
                             HorizontalAlignment="Stretch" Click="AddSource_Click"/>
-                    <TextBlock Text="Dodawane są tylko wskazane foldery. Rejestracja nie uruchamia skanu."
-                               FontSize="11" TextWrapping="Wrap"
+                    <TextBlock Text="Indeksowane są tylko wybrane lokalizacje."
+                               FontSize="10" TextWrapping="Wrap"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
             </Grid>

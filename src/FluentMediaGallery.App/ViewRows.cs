@@ -116,6 +116,10 @@ public sealed class FolderNodeRow
     public string Status { get; }
     public string Chevron { get; }
     public Microsoft.UI.Xaml.Thickness Indent { get; }
+    public Microsoft.UI.Xaml.Visibility StatusVisibility =>
+        string.IsNullOrEmpty(Status)
+            ? Microsoft.UI.Xaml.Visibility.Collapsed
+            : Microsoft.UI.Xaml.Visibility.Visible;
 
     public FolderNodeRow(long sourceId, string path, int depth, bool isRoot,
         bool isShortcut, bool expanded, string status)
@@ -125,10 +129,10 @@ public sealed class FolderNodeRow
         IsRoot = isRoot;
         IsShortcut = isShortcut;
         Depth = depth;
-        DisplayTitle = (isShortcut ? "↗ " : "📁 ") +
+        DisplayTitle = (isShortcut ? "↗ " : "") +
             (System.IO.Path.GetFileName(path.TrimEnd('\\')) is { Length: > 0 } name ? name : path);
         Status = status;
         Chevron = isShortcut ? " " : expanded ? "▾" : "▸";
-        Indent = new Microsoft.UI.Xaml.Thickness(Math.Min(11 * depth, 88), 0, 0, 0);
+        Indent = new Microsoft.UI.Xaml.Thickness(Math.Min(12 * depth, 72), 0, 0, 0);
     }
 }
