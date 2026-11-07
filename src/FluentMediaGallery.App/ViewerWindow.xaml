@@ -6,49 +6,44 @@
     Title="FluentMediaGallery — Podgląd">
     <Grid x:Name="ViewerRoot" Background="#101114">
         <Grid.RowDefinitions>
-            <RowDefinition Height="31"/>
-            <RowDefinition Height="38"/>
-            <RowDefinition Height="*"/>
             <RowDefinition Height="44"/>
+            <RowDefinition Height="*"/>
             <RowDefinition x:Name="FilmstripRow" Height="90"/>
+            <RowDefinition Height="54"/>
         </Grid.RowDefinitions>
-        <!-- Only the left region is draggable. Action buttons must remain interactive. -->
-        <Grid Grid.Row="0" Background="#202226" ColumnSpacing="4">
+        <!-- One Photos-like title/toolbar; reserve 144 DIP for system caption buttons. -->
+        <Grid Grid.Row="0" Background="#202226" ColumnSpacing="5" Padding="5,0,0,0">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="144"/>
             </Grid.ColumnDefinitions>
-            <Grid x:Name="TitleDragRegion" Grid.Column="0" Background="Transparent" Padding="12,0">
-                <TextBlock Text="FluentMediaGallery" Foreground="#AEB6C0"
-                           VerticalAlignment="Center" FontSize="11"/>
-            </Grid>
-            <Button Grid.Column="1" x:Name="FavoriteButton" Click="Favorite_Click"
-                    Content="♡ Ulubione (L)" IsEnabled="False" Height="27"
-                    Padding="10,1" FontSize="11"/>
-            <Button Grid.Column="2" x:Name="FilmstripButton" Click="FilmstripToggle_Click"
-                    Content="Pasek (F)" Height="27" Padding="10,1" FontSize="11"/>
-            <Button Grid.Column="3" x:Name="DetailsButton" Click="DetailsToggle_Click"
-                    Content="ⓘ Szczegóły" Height="27" Padding="10,1" FontSize="11"/>
-        </Grid>
-        <Grid Grid.Row="1" Background="#222428" Padding="9,2" ColumnSpacing="6">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
             <Button Grid.Column="0" Content="← Galeria" Click="Close_Click"
-                    Padding="8,2" FontSize="11"/>
-            <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                <TextBlock x:Name="FileTitle" Text="Podgląd" Foreground="White"
-                           FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                <TextBlock x:Name="ContextTitle" Text="Wczytywanie..."
-                           Foreground="#B7BEC7" FontSize="10" TextTrimming="CharacterEllipsis"/>
-            </StackPanel>
+                    Padding="9,3" Height="30" FontSize="12"/>
+            <Grid x:Name="TitleDragRegion" Grid.Column="1"
+                  Background="Transparent" Padding="8,0">
+                <StackPanel Spacing="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="FileTitle" Text="Podgląd" Foreground="White"
+                               FontSize="13" FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="ContextTitle" Text="Wczytywanie..."
+                               Foreground="#A9B3BC" FontSize="10"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </Grid>
+            <Button Grid.Column="2" x:Name="FavoriteButton" Click="Favorite_Click"
+                    Content="♡ Ulubione (L)" IsEnabled="False" Height="30"
+                    Padding="10,2" FontSize="11"/>
+            <Button Grid.Column="3" x:Name="FilmstripButton" Click="FilmstripToggle_Click"
+                    Content="Pasek (F)" Height="30" Padding="10,2" FontSize="11"/>
+            <Button Grid.Column="4" x:Name="DetailsButton" Click="DetailsToggle_Click"
+                    Content="ⓘ Szczegóły" Height="30" Padding="10,2" FontSize="11"/>
         </Grid>
 
-        <Grid Grid.Row="2" x:Name="PhotoSurface" Background="#101114"
+        <Grid Grid.Row="1" x:Name="PhotoSurface" Background="#101114"
               SizeChanged="PhotoSurface_SizeChanged">
             <Grid.ContextFlyout>
                 <MenuFlyout>
@@ -126,9 +121,14 @@
                 <ColumnDefinition Width="170"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" x:Name="Status" Text=""
-                       Foreground="#A9B4BF" VerticalAlignment="Center" FontSize="10"
-                       TextTrimming="CharacterEllipsis" Margin="0,0,14,0"/>
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="14"
+                        VerticalAlignment="Center" Margin="5,0,14,0">
+                <TextBlock x:Name="Status" Text="— px · JPG"
+                           FontSize="13" Foreground="#E8EDF2"
+                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="FileSizeLabel" Text="" FontSize="12"
+                           Foreground="#9FA9B6" VerticalAlignment="Center"/>
+            </StackPanel>
             <Button Grid.Column="1" x:Name="ZoomModeButton" Content="Dopasuj"
                     Click="ZoomModeButton_Click" Padding="8,3"
                     ToolTipService.ToolTip="Przełącz między dopasowaniem do okna i 100% oryginału"/>
@@ -143,7 +143,7 @@
             <Button Grid.Column="5" Content="+" FontSize="17" Click="ZoomIn_Click" Padding="7,0"/>
         </Grid>
 
-        <Border Grid.Row="4" x:Name="FilmstripBorder" Background="#202226"
+        <Border Grid.Row="2" x:Name="FilmstripBorder" Background="#202226"
                 Padding="5,2">
             <Grid>
                 <ListView x:Name="Filmstrip" Height="82" SelectionMode="None"
