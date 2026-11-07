@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Graphics.Imaging;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using VirtualKey = Windows.System.VirtualKey;
@@ -143,7 +144,10 @@ public sealed partial class ViewerWindow : Window
             ? $"Klasyfikacja: {FavoriteRatingPolicy.ToStars(media.FileRating.Value)} ★ ({media.FileRating}/99)"
             : "Klasyfikacja: brak / nieodczytana";
         DetailsPathText.Text = media.FullPath;
-        Status.Text = media.FullPath;
+        var extension = Path.GetExtension(media.FullPath).TrimStart('.').ToUpperInvariant();
+        var format = extension is "JPEG" or "JPE" ? "JPG" : extension;
+        Status.Text = format + " · wczytywanie wymiarów…";
+        DetailsDimensionsText.Text = "Wymiary: wczytywanie…";
         ImageMessage.Text = "";
         FullImage.Source = null;
         LoadingIndicator.IsActive = true;
@@ -173,16 +177,55 @@ public sealed partial class ViewerWindow : Window
                     SetImageFitDimensions(image);
                     ImageMessage.Text = "Film — podgląd klatki; odtwarzacz wideo jest jeszcze w przygotowaniu.";
                 }
+                if (ticket == _loadVersion && _ready)
+                {
+                    try
+                    {
+                        var movie = await StorageFile.GetFileFromPathAsync(media.FullPath);
+                        var props = await movie.Properties.GetVideoPropertiesAsync();
+                        if (ticket == _loadVersion && _ready && props.Width > 0 && props.Height > 0)
+                        {
+                            Status.Text = $"{props.Width:N0} × {props.Height:N0} px  ·  {format}";
+                            DetailsDimensionsText.Text = $"Wymiary: {props.Width:N0} × {props.Height:N0} px";
+                        }
+                        else if (ticket == _loadVersion && _ready)
+                            Status.Text = format + " · film";
+                    }
+                    catch (Exception)
+                    {
+                        if (ticket == _loadVersion && _ready)
+                            Status.Text = format + " · film";
+                    }
+                }
                 return;
             }
 
             var sourceFile = await StorageFile.GetFileFromPathAsync(media.FullPath);
             using var imageStream = await sourceFile.OpenReadAsync();
+            uint originalWidth = 0, originalHeight = 0;
+            try
+            {
+                // Read original image dimensions without decoding all pixels or
+                // relying on the downscaled BitmapImage preview dimensions.
+                var decoder = await BitmapDecoder.CreateAsync(imageStream);
+                originalWidth = decoder.PixelWidth;
+                originalHeight = decoder.PixelHeight;
+            }
+            catch (Exception)
+            {
+                // Unsupported codec: BitmapImage may still render. Fall back
+                // to preview dimensions rather than preventing the photo opening.
+            }
+            imageStream.Seek(0);
             var bitmap = new BitmapImage { DecodePixelWidth = 3840 };
             await bitmap.SetSourceAsync(imageStream);
             if (ticket != _loadVersion || !_ready) return;
             FullImage.Source = bitmap;
             SetImageFitDimensions(bitmap);
+            var displayedWidth = originalWidth > 0 ? originalWidth : (uint)bitmap.PixelWidth;
+            var displayedHeight = originalHeight > 0 ? originalHeight : (uint)bitmap.PixelHeight;
+            Status.Text = $"{displayedWidth:N0} × {displayedHeight:N0} px  ·  {format}";
+            DetailsDimensionsText.Text = $"Wymiary: {displayedWidth:N0} × {displayedHeight:N0} px";
         }
         catch (Exception ex)
         {
@@ -222,6 +265,23 @@ public sealed partial class ViewerWindow : Window
         });
     }
 
+    private void ZoomScroll_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!_ready || _imageWidth <= 0 || _imageHeight <= 0 ||
+            (Math.Abs(e.PreviousSize.Width - e.NewSize.Width) < 0.5 &&
+             Math.Abs(e.PreviousSize.Height - e.NewSize.Height) < 0.5)) return;
+
+        // DetailsPane changes the ScrollViewer width while PhotoSurface retains
+        // its size. Perform the fit after WinUI has applied the new column width.
+        _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            if (!_ready || _imageWidth <= 0 || _imageHeight <= 0) return;
+            RecalculateFit();
+            if (_fitToWindow) FitToWindow();
+            else ChangeZoom(_currentPercent, animate: false);
+        });
+    }
+
     private void PhotoSurface_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (!_ready || _imageWidth <= 0 || _imageHeight <= 0) return;
@@ -237,9 +297,9 @@ public sealed partial class ViewerWindow : Window
         // the real AppWindow dimensions instead of fitting to a 1-pixel viewport.
         // PhotoSurface.SizeChanged will re-fit once WinUI reports the final size.
         var w = ZoomScroll.ActualWidth > 100
-            ? ZoomScroll.ActualWidth - 12 : Math.Max(320, AppWindow.Size.Width - 130);
+            ? ZoomScroll.ActualWidth - 2 : Math.Max(320, AppWindow.Size.Width - (_detailsVisible ? 295 : 5));
         var h = ZoomScroll.ActualHeight > 100
-            ? ZoomScroll.ActualHeight - 12 : Math.Max(240, AppWindow.Size.Height - 235);
+            ? ZoomScroll.ActualHeight - 2 : Math.Max(240, AppWindow.Size.Height - 210);
         _fitScale = Math.Min(w / _imageWidth, h / _imageHeight);
         _fitScale = Math.Clamp(_fitScale, 0.001, 10);
         FullImage.Width = Math.Max(1, _imageWidth * ImageBaseScale);
@@ -353,6 +413,7 @@ public sealed partial class ViewerWindow : Window
     {
         _detailsVisible = !_detailsVisible;
         DetailsPane.Visibility = _detailsVisible ? Visibility.Visible : Visibility.Collapsed;
+        DetailsPaneColumn.Width = new GridLength(_detailsVisible ? 290 : 0);
         DetailsButton.Content = _detailsVisible ? "ⓘ Szczegóły ✓" : "ⓘ Szczegóły";
     }
 
@@ -403,7 +464,7 @@ public sealed partial class ViewerWindow : Window
         try
         {
             var result = await Task.Run(() => _favorites.SetFavoriteAsync(entry.Id, !entry.IsFavorite));
-            Status.Text = result.StoredInFile ? "System.Rating zapisany i zweryfikowany."
+            ImageMessage.Text = result.StoredInFile ? "System.Rating zapisany i zweryfikowany."
                 : "Ulubione zapisano w SQLite, zapis do pliku nie powiódł się: " + result.Error;
             _onFavoriteChanged();
             var changed = await _database.GetByIdAsync(entry.Id);
@@ -432,7 +493,7 @@ public sealed partial class ViewerWindow : Window
         }
         catch (Exception ex)
         {
-            Status.Text = "Błąd ulubionych: " + ex.Message;
+            ImageMessage.Text = "Błąd ulubionych: " + ex.Message;
         }
         finally { FavoriteButton.IsEnabled = _ready; }
     }
@@ -543,7 +604,7 @@ public sealed partial class ViewerWindow : Window
         var package = new DataPackage();
         package.SetText(entry.FullPath);
         Clipboard.SetContent(package);
-        Status.Text = "Skopiowano ścieżkę pliku.";
+        ImageMessage.Text = "Skopiowano ścieżkę pliku.";
     }
 
     private async void Explorer_Click(object sender, RoutedEventArgs e)
@@ -562,7 +623,7 @@ public sealed partial class ViewerWindow : Window
         }
         catch (Exception ex)
         {
-            Status.Text = "Nie można otworzyć Eksploratora: " + ex.Message;
+            ImageMessage.Text = "Nie można otworzyć Eksploratora: " + ex.Message;
         }
     }
 }

@@ -109,6 +109,7 @@
                            TextWrapping="WrapWholeWords"/>
                 <TextBlock x:Name="DetailsTypeText" Text="" FontSize="12"/>
                 <TextBlock x:Name="DetailsSizeText" Text="" FontSize="12"/>
+                <TextBlock x:Name="DetailsDimensionsText" Text="" FontSize="12"/>
                 <TextBlock x:Name="DetailsRatingText" Text="" FontSize="12"/>
                 <TextBlock x:Name="DetailsPathText" Text="" TextWrapping="WrapWholeWords"
                            FontSize="11" Foreground="#B7BEC7"/>
