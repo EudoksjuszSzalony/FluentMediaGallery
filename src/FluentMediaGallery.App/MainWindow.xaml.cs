@@ -41,6 +41,8 @@ public sealed partial class MainWindow : Window
 
         SourceItems.ItemsSource = _sources;
         MediaItems.ItemsSource = _rows;
+        ViewerFilmstrip.ItemsSource = _rows;
+        LayoutRoot.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Viewer_KeyDown), true);
         Closed += (_, _) => _activeOperation?.Cancel();
 
         // Startup uses only persisted SQLite. Never enumerate folders implicitly.
@@ -220,9 +222,14 @@ public sealed partial class MainWindow : Window
         FavoriteStatus.Text = state.Pending
             ? "Zapis do pliku oczekuje: " + (state.Error ?? "niezsynchronizowany")
             : "";
+
+        await OpenViewerAsync(row.Entry);
     }
 
     private async void Favorite_Click(object sender, RoutedEventArgs e)
+        => await ToggleFavoriteAsync();
+
+    private async Task ToggleFavoriteAsync()
     {
         if (_selectedMedia is not MediaEntry media || _activeOperation is not null) return;
         if (!_metadataWriteConfirmed)
@@ -242,6 +249,7 @@ public sealed partial class MainWindow : Window
         }
 
         FavoriteButton.IsEnabled = false;
+        ViewerFavoriteButton.IsEnabled = false;
         try
         {
             var desired = !media.IsFavorite;
@@ -252,14 +260,19 @@ public sealed partial class MainWindow : Window
                 ? "Zapisano i zweryfikowano ocenę w pliku."
                 : "Ulubione zapisano tylko w SQLite. Plik: " + result.Error;
             await LoadPageAsync();
+
+            if (_selectedMedia is not null)
+                UpdateViewerAfterFavorite(_selectedMedia, FavoriteStatus.Text);
         }
         catch (Exception ex)
         {
             FavoriteStatus.Text = "Błąd zmiany ulubionych: " + ex.Message;
+            if (_viewerVisible) ViewerStatus.Text = FavoriteStatus.Text;
         }
         finally
         {
             FavoriteButton.IsEnabled = _selectedMedia is not null;
+            ViewerFavoriteButton.IsEnabled = _selectedMedia is not null;
         }
     }
 
@@ -282,14 +295,38 @@ public sealed partial class MainWindow : Window
                 _uiDispatcher.TryEnqueue(() => OperationStatus.Text = $"Indeksowanie: {n:N0} plików · {source.Root}"));
             var result = await Task.Run(() => _indexer.ScanAsync(source, progress, cts.Token), cts.Token);
             OperationStatus.Text = result.Completed
-                ? $"Zindeksowano {result.Discovered:N0} plików. Bez błędów."
+                ? $"Zindeksowano {result.Discovered:N0} plików. Trwa odczyt klasyfikacji..."
                 : $"Niepełny skan / niedostępne źródło. Zachowano indeks. Błędy: {result.Errors}.";
             await ReloadSourcesAsync();
             await LoadPageAsync();
+
+            // A complete scan is followed by read-only System.Rating import for THIS source.
+            // It runs in the background, in batches, and can be canceled at any time.
+            if (result.Completed)
+            {
+                var imported = await Task.Run(async () =>
+                {
+                    int count = 0;
+                    while (true)
+                    {
+                        cts.Token.ThrowIfCancellationRequested();
+                        int step = await _ratingImporter.ImportNextBatchAsync(64, cts.Token, source.Id);
+                        if (step == 0) break;
+                        count += step;
+                        int snapshot = count;
+                        _uiDispatcher.TryEnqueue(() =>
+                            OperationStatus.Text = $"Wczytywanie klasyfikacji: {snapshot:N0} · {source.Root}");
+                    }
+                    return count;
+                }, cts.Token);
+
+                OperationStatus.Text = $"Zindeksowano {result.Discovered:N0} plików i odczytano klasyfikację {imported:N0} plików.";
+                await LoadPageAsync();
+            }
         }
         catch (OperationCanceledException)
         {
-            OperationStatus.Text = "Indeksowanie anulowane. Wcześniejsze wpisy zachowane.";
+            OperationStatus.Text = "Anulowano indeksowanie lub odczyt klasyfikacji. Zapisane wpisy pozostają w SQLite.";
             await LoadPageAsync();
         }
         catch (Exception ex)

@@ -31,6 +31,10 @@ try
     var scan = await scanner.ScanAsync(source);
     Check(scan.Completed && scan.Discovered == 2, "initial scan stores photo and video");
     Check(await database.CountMediaAsync() == 2, "two indexed media");
+    Check((await database.GetPendingRatingsAsync(sourceId: source.Id)).Count == 2,
+        "source-scoped pending rating import includes both files");
+    Check((await database.GetPendingRatingsAsync(sourceId: -999)).Count == 0,
+        "source-scoped rating import excludes another source");
     Check(await database.CountFilteredAsync(sourceId: source.Id) == 2,
         "source filter returns both indexed files");
     Check(await database.CountFilteredAsync(sourceId: -999) == 0,
