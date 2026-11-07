@@ -228,3 +228,9 @@ NEXT STEPS:
 - Viewer regression tests: one top bar, filmstrip ABOVE zoom section, dimensions+file size on lower left, short photo slide but no zoom flicker, F toggles filmstrip, Details toggles with fade/slide, resize fit remains stable, keyboard/wheel nav unchanged.
 - Sidebar test: default width looks similar to Microsoft Photos at normal Windows scale; users can still drag; expand/collapse deep folders to check no reset/scroll jumps. Visual dimensions can differ with DPI and scaling; NOT an exact pixel-perfect claim.
 - Future technical debt: true physically bounded virtualization for 201k+, preindexed dimensions instead of GDI file header reads from NAS, smarter global mosaic optimization across the collection, reflow without scroll jump on width changes, EXIF date taken, video playback and SMB change reconciliation. Do not conflate photo preview with video playback or direct file-rating write verification; write only to COPIES.
+
+## 2026-11-07 — Viewer: compact bottom zoom/properties strip
+
+- User-provided screenshot after prior mosaic/viewer stage confirms the image viewer runs and has filmstrip above the zoom/properties bar; requested a **shorter bottom bar**, without changing the thumbnail row.
+- Source change: `ViewerWindow.xaml` last Grid.RowDefinition reduced from 54 DIP to **36 DIP**; grid Padding 10,2→8,0 and ColumnSpacing 5→4, status text margins reduced slightly; Fit/+/− controls explicitly 28 DIP high (MinHeight=0), slider 28 DIP high. Dimensions and file size text remain readable at unchanged font sizes, selection border and filmstrip 90 DIP untouched.
+- This is XAML-only; no Core/schema/dependency changes. Source committed to develop; new Dominator build/screenshot NOT YET verified. Verify buttons/slider not clipped at user DPI setting and filmstrip unchanged. No GitHub Actions invoked or user data touched.

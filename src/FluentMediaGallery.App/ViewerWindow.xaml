@@ -9,7 +9,7 @@
             <RowDefinition Height="44"/>
             <RowDefinition Height="*"/>
             <RowDefinition x:Name="FilmstripRow" Height="90"/>
-            <RowDefinition Height="54"/>
+            <RowDefinition Height="36"/>
         </Grid.RowDefinitions>
         <!-- One Photos-like title/toolbar; reserve 144 DIP for system caption buttons. -->
         <Grid Grid.Row="0" Background="#202226" ColumnSpacing="5" Padding="5,0,0,0">
@@ -112,7 +112,7 @@
         </Border>
         </Grid>
 
-        <Grid Grid.Row="3" Background="#202226" Padding="10,2" ColumnSpacing="5">
+        <Grid Grid.Row="3" Background="#202226" Padding="8,0" ColumnSpacing="4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -122,7 +122,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="14"
-                        VerticalAlignment="Center" Margin="5,0,14,0">
+                        VerticalAlignment="Center" Margin="3,0,9,0">
                 <TextBlock x:Name="Status" Text="— px · JPG"
                            FontSize="13" Foreground="#E8EDF2"
                            FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
@@ -130,17 +130,20 @@
                            Foreground="#9FA9B6" VerticalAlignment="Center"/>
             </StackPanel>
             <Button Grid.Column="1" x:Name="ZoomModeButton" Content="Dopasuj"
-                    Click="ZoomModeButton_Click" Padding="8,3"
+                    Click="ZoomModeButton_Click" Padding="8,0" Height="28" MinHeight="0"
                     ToolTipService.ToolTip="Przełącz między dopasowaniem do okna i 100% oryginału"/>
-            <Button Grid.Column="2" Content="−" FontSize="17" Click="ZoomOut_Click" Padding="7,0"/>
+            <Button Grid.Column="2" Content="−" FontSize="17" Click="ZoomOut_Click"
+                    Padding="7,0" Height="28" MinHeight="0"/>
             <TextBlock Grid.Column="3" x:Name="ZoomLabel" Text="—"
                        FontSize="11" Foreground="White" Width="48"
                        VerticalAlignment="Center" TextAlignment="Center"/>
             <Slider Grid.Column="4" x:Name="ZoomSlider" Minimum="5" Maximum="500"
                     StepFrequency="1" Value="100" VerticalAlignment="Center"
+                    Height="28" MinHeight="0"
                     ValueChanged="ZoomSlider_ValueChanged"
                     AutomationProperties.Name="Powiększenie w procentach oryginalnego obrazu"/>
-            <Button Grid.Column="5" Content="+" FontSize="17" Click="ZoomIn_Click" Padding="7,0"/>
+            <Button Grid.Column="5" Content="+" FontSize="17" Click="ZoomIn_Click"
+                    Padding="7,0" Height="28" MinHeight="0"/>
         </Grid>
 
         <Border Grid.Row="2" x:Name="FilmstripBorder" Background="#202226"
