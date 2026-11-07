@@ -57,3 +57,10 @@ Following a repeatable Dominator runtime exception (WinUI ScrollViewer rejects M
 The new viewer top bar puts favorites, filmstrip and optional Details next to the native caption controls. Only the separate ViewerWindow displays details on demand; the main gallery details column is hidden. Filmstrip selection uses a thin outline rather than a filled selected item. The gallery has its own dark action titlebar, a grouped sort flyout (field + direction), responsive square tile widths and improved date-grouped Rzeka rows without oversized panorama strips. This remains an approximation of Windows Photos styling, not a complete UI parity claim.
 
 **Status:** committed to `develop`; static XAML/handler checks pass; the newest stage is **NOT yet built or tested on Dominator**. Do not mass-index original media yet or test System.Rating writes except on copies.
+
+
+### 2026-11-07 — Edge-to-edge image fitting, image properties and continuous Rzeka (unverified source)
+
+- Viewer now gives ScrollViewer the complete available picture area, with previous/next controls overlaid at the sides and a separate column for on-demand Details. Fit recalculates as Details opens/closes, preserving image aspect ratio. Bottom-left bar shows dimensions in source pixels and extension (e.g. 1920 × 1080 px · JPG) rather than a filesystem path, with fallback for unsupported decoders.
+- Rzeka now packs photos continuously across date boundaries rather than forcing one often-sparse row per month, and shows a single range caption above the first row. The row packing balances aspect ratios against target row height while limiting extremely wide logos. Further tuning toward Microsoft Photos is still planned.
+- User confirmed previous build's window resizing, Details and thumbnail-frame selection. **These new commits have not been compiled or visually validated yet on Dominator.**

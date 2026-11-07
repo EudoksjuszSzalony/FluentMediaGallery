@@ -75,3 +75,9 @@ ViewerWindow uses a snapshot GalleryViewContext and paged database queries to na
 - Rzeka computes aspect ratios of already loaded image paths off UI thread (photo header via System.Drawing, video 16/9), then divides into justified rows. Responsive reflow reconstructs row objects; future improvements: caches dimensions in DB, incremental row append and precise date grouping.
 - Timeline uses SQL MIN/MAX ticks under active source/folder/search/favorites filter, labels years/rating endpoints and provides percent-to-offset seek. It is an initial scrollbar; discrete rating-bucket jumps and full timeline grouping remain future.
 - Viewer loads one bounded 100-row page and reuses it for navigation so filmstrip thumbnails do not blink. Zoom UI exposes percent relative to decoded image, fit switch; custom title region uses Window.ExtendsContentIntoTitleBar and Window.SetTitleBar with native Windows caption controls. New stage unverified on Dominator.
+
+
+### Viewer viewport and continuous river (2026-11-07)
+
+- ViewerWindow uses PhotoSurface with a star-sized photo column and a separate, initially zero-width Details pane column. Previous/next hover controls overlay the image area instead of reserving permanent side columns. A ScrollViewer SizeChanged callback re-fits after details-pane width changes; image aspect ratio is maintained. Pixel dimensions are read from Windows.Graphics.Imaging.BitmapDecoder before the width-limited preview decode, with fallback. Format comes from the file extension.
+- Justified Rzeka rows no longer reset at month boundaries. Each built row is packed by ratio (bounded 0.55–3.6) targeting around 194 DIP height, with a one-time filtered date range caption; last incomplete row remains naturally left-aligned. This builder still obtains dimensions via GDI+ header reads on currently loaded items and is not the final >200k implementation. Both changes committed but not yet built on Dominator.
