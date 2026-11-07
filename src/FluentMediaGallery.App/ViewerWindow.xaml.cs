@@ -124,8 +124,6 @@ public sealed partial class ViewerWindow : Window
                 _currentPage[_selectedLocalIndex].SetCurrent(false);
             _selectedLocalIndex = localIndex;
             _currentPage[localIndex].SetCurrent(true);
-            if (Filmstrip.SelectedIndex != localIndex)
-                Filmstrip.SelectedIndex = localIndex;
             Filmstrip.ScrollIntoView(_currentPage[localIndex]);
         }
         finally { _suppressFilmstrip = false; }
@@ -358,11 +356,13 @@ public sealed partial class ViewerWindow : Window
         DetailsButton.Content = _detailsVisible ? "ⓘ Szczegóły ✓" : "ⓘ Szczegóły";
     }
 
-    private async void Filmstrip_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void Filmstrip_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (!_ready || _suppressFilmstrip || _navigating || Filmstrip.SelectedIndex < 0) return;
-        long pageStart = (_offset / PageSize) * PageSize;
-        long requested = pageStart + Filmstrip.SelectedIndex;
+        if (!_ready || _suppressFilmstrip || _navigating ||
+            e.ClickedItem is not MediaRow clicked) return;
+        var index = _currentPage.IndexOf(clicked);
+        if (index < 0) return;
+        var requested = (_offset / PageSize) * PageSize + index;
         if (requested == _offset || requested >= _total) return;
         _offset = requested;
         await ShowCurrentAsync();

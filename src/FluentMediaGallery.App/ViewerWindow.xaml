@@ -129,13 +129,22 @@
         <Border Grid.Row="4" x:Name="FilmstripBorder" Background="#202226"
                 Padding="5,2">
             <Grid>
-                <ListView x:Name="Filmstrip" Height="82" SelectionMode="Single"
-                          SelectionChanged="Filmstrip_SelectionChanged"
+                <ListView x:Name="Filmstrip" Height="82" SelectionMode="None"
+                          IsItemClickEnabled="True" ItemClick="Filmstrip_ItemClick"
                           ContainerContentChanging="Filmstrip_ContainerContentChanging"
                           ScrollViewer.HorizontalScrollMode="Enabled"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           ScrollViewer.VerticalScrollMode="Disabled"
                           ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="MinWidth" Value="0"/>
+                            <Setter Property="MinHeight" Value="0"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.ItemsPanel>
                         <ItemsPanelTemplate>
                             <ItemsStackPanel Orientation="Horizontal"/>
