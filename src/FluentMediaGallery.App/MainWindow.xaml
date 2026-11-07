@@ -290,18 +290,15 @@
                                         <Canvas/>
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemContainerStyle>
-                                    <Style TargetType="ContentPresenter">
-                                        <Setter Property="Canvas.Left" Value="{Binding Left}"/>
-                                        <Setter Property="Canvas.Top" Value="{Binding Top}"/>
-                                    </Style>
-                                </ItemsControl.ItemContainerStyle>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Button Click="RiverTile_Click" Tag="{Binding Media}"
                                                 Width="{Binding Width}" Height="{Binding Height}"
                                                 Margin="0" Padding="0" BorderThickness="0"
                                                 CornerRadius="3" Background="Transparent">
+                                            <Button.RenderTransform>
+                                                <TranslateTransform X="{Binding Left}" Y="{Binding Top}"/>
+                                            </Button.RenderTransform>
                                             <Grid Width="{Binding ImageWidth}" Height="{Binding ImageHeight}"
                                                   Background="#26292C">
                                                 <Image Source="{Binding Media.Thumbnail}"
