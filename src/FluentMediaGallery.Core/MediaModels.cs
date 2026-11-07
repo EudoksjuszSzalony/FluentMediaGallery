@@ -15,10 +15,12 @@ public sealed record MediaEntry(
     long LastWriteUtcTicks,
     int? FileRating,
     bool? FavoriteOverride,
-    bool IsFavorite);
+    bool IsFavorite,
+    long CreatedUtcTicks = 0);
 
 public sealed record MediaFile(
-    string FullPath, string Name, MediaKind Kind, long Size, long LastWriteUtcTicks);
+    string FullPath, string Name, MediaKind Kind, long Size, long LastWriteUtcTicks,
+    long CreatedUtcTicks = 0);
 
 public sealed record RatingCandidate(long Id, string Path);
 public sealed record FavoriteWriteCandidate(long Id, string Path, bool Favorite);

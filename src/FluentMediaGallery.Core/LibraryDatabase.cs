@@ -44,6 +44,11 @@ public sealed class LibraryDatabase
                 last_scan_utc TEXT,
                 last_error TEXT
             );
+            CREATE TABLE IF NOT EXISTS view_preferences (
+                view_key TEXT PRIMARY KEY COLLATE NOCASE,
+                sort_key TEXT NOT NULL DEFAULT 'modified-desc',
+                layout_key TEXT NOT NULL DEFAULT 'square'
+            );
             CREATE TABLE IF NOT EXISTS shortcuts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_id INTEGER NOT NULL REFERENCES sources(id),
@@ -58,6 +63,7 @@ public sealed class LibraryDatabase
                 kind INTEGER NOT NULL,
                 size INTEGER NOT NULL,
                 modified_ticks INTEGER NOT NULL,
+                created_ticks INTEGER NOT NULL DEFAULT 0,
                 seen_generation INTEGER NOT NULL DEFAULT 0,
                 missing INTEGER NOT NULL DEFAULT 0,
                 rating_raw INTEGER,
@@ -94,6 +100,17 @@ public sealed class LibraryDatabase
             using var alter = connection.CreateCommand();
             alter.CommandText = "ALTER TABLE media ADD COLUMN favorite_write_error TEXT;";
             await alter.ExecuteNonQueryAsync(ct);
+        }
+        if (!columns.Contains("created_ticks"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE media ADD COLUMN created_ticks INTEGER NOT NULL DEFAULT 0;";
+            await alter.ExecuteNonQueryAsync(ct);
+        }
+        using (var index = connection.CreateCommand())
+        {
+            index.CommandText = "CREATE INDEX IF NOT EXISTS ix_media_created ON media(missing, created_ticks DESC, id DESC);";
+            await index.ExecuteNonQueryAsync(ct);
         }
     }
 
@@ -255,8 +272,8 @@ public sealed class LibraryDatabase
         using var cmd = connection.CreateCommand();
         cmd.Transaction = (SqliteTransaction)transaction;
         cmd.CommandText = """
-            INSERT INTO media(source_id,path,file_name,kind,size,modified_ticks,seen_generation,missing)
-            VALUES($source,$path,$name,$kind,$size,$ticks,$gen,0)
+            INSERT INTO media(source_id,path,file_name,kind,size,modified_ticks,created_ticks,seen_generation,missing)
+            VALUES($source,$path,$name,$kind,$size,$ticks,$created,$gen,0)
             ON CONFLICT(path) DO UPDATE SET
                 source_id=excluded.source_id,
                 file_name=excluded.file_name,
@@ -267,6 +284,7 @@ public sealed class LibraryDatabase
                     THEN media.rating_checked ELSE 0 END,
                 size=excluded.size,
                 modified_ticks=excluded.modified_ticks,
+                created_ticks=excluded.created_ticks,
                 seen_generation=excluded.seen_generation,
                 missing=0;
             """;
@@ -276,6 +294,7 @@ public sealed class LibraryDatabase
         var kind = cmd.Parameters.Add("$kind", SqliteType.Integer);
         var size = cmd.Parameters.Add("$size", SqliteType.Integer);
         var ticks = cmd.Parameters.Add("$ticks", SqliteType.Integer);
+        var created = cmd.Parameters.Add("$created", SqliteType.Integer);
         var gen = cmd.Parameters.Add("$gen", SqliteType.Integer);
         cmd.Prepare();
         foreach (var file in files)
@@ -287,6 +306,7 @@ public sealed class LibraryDatabase
             kind.Value = (int)file.Kind;
             size.Value = file.Size;
             ticks.Value = file.LastWriteUtcTicks;
+            created.Value = file.CreatedUtcTicks;
             gen.Value = generation;
             await cmd.ExecuteNonQueryAsync(ct);
         }
@@ -304,9 +324,58 @@ public sealed class LibraryDatabase
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+
+    private static string ResolveOrderBy(string? sortKey) => sortKey switch
+    {
+        "modified-asc" => "modified_ticks ASC, id ASC",
+        "created-desc" => "CASE WHEN created_ticks=0 THEN modified_ticks ELSE created_ticks END DESC, id DESC",
+        "created-asc" => "CASE WHEN created_ticks=0 THEN modified_ticks ELSE created_ticks END ASC, id ASC",
+        "name-asc" => "file_name COLLATE NOCASE ASC, id ASC",
+        "name-desc" => "file_name COLLATE NOCASE DESC, id DESC",
+        "rating-desc" => "COALESCE(rating_raw,0) DESC, modified_ticks DESC, id DESC",
+        "rating-asc" => "COALESCE(rating_raw,0) ASC, modified_ticks DESC, id DESC",
+        "favorites-desc" => "COALESCE(favorite_override,CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END) DESC, modified_ticks DESC, id DESC",
+        "favorites-asc" => "COALESCE(favorite_override,CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END) ASC, modified_ticks DESC, id DESC",
+        _ => "modified_ticks DESC, id DESC"
+    };
+
+    public async Task<(string SortKey, string LayoutKey)> GetViewPreferenceAsync(
+        string viewKey, CancellationToken ct = default)
+    {
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT sort_key,layout_key FROM view_preferences WHERE view_key=$key;";
+        cmd.Parameters.AddWithValue("$key", viewKey);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (await reader.ReadAsync(ct)) return (reader.GetString(0), reader.GetString(1));
+        return ("modified-desc", "square");
+    }
+
+    public async Task SetViewPreferenceAsync(string viewKey, string sortKey,
+        string layoutKey, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(viewKey)) throw new ArgumentException("View key required.", nameof(viewKey));
+        // Only store known allow-listed settings; no user input is ever interpolated into SQL.
+        if (sortKey != "modified-desc" && ResolveOrderBy(sortKey) == ResolveOrderBy(null))
+            throw new ArgumentOutOfRangeException(nameof(sortKey));
+        if (layoutKey is not ("square" or "river"))
+            throw new ArgumentOutOfRangeException(nameof(layoutKey));
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO view_preferences(view_key,sort_key,layout_key)
+            VALUES($key,$sort,$layout)
+            ON CONFLICT(view_key) DO UPDATE SET sort_key=excluded.sort_key,layout_key=excluded.layout_key;
+            """;
+        cmd.Parameters.AddWithValue("$key", viewKey);
+        cmd.Parameters.AddWithValue("$sort", sortKey);
+        cmd.Parameters.AddWithValue("$layout", layoutKey);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<IReadOnlyList<MediaEntry>> GetPageAsync(int offset, int limit,
         bool favoritesOnly = false, string? search = null, CancellationToken ct = default,
-        long? sourceId = null, string? folderPath = null)
+        long? sourceId = null, string? folderPath = null, string? sortKey = null)
     {
         if (offset < 0 || limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
         var result = new List<MediaEntry>();
@@ -315,15 +384,16 @@ public sealed class LibraryDatabase
         cmd.CommandText = """
             SELECT id, source_id, path, file_name, kind, size, modified_ticks, rating_raw,
                 favorite_override,
-                COALESCE(favorite_override, CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END) AS fav
+                COALESCE(favorite_override, CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END) AS fav,
+                created_ticks
             FROM media WHERE missing=0
                 AND ($source=0 OR source_id=$source)
                 AND ($folder='' OR path LIKE $folder ESCAPE '\')
                 AND ($favorites=0 OR COALESCE(favorite_override,
                     CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END)=1)
                 AND ($search='' OR file_name LIKE $search ESCAPE '\')
-            ORDER BY modified_ticks DESC, id DESC LIMIT $limit OFFSET $offset;
-            """;
+            ORDER BY SORT_EXPRESSION LIMIT $limit OFFSET $offset;
+            """.Replace("SORT_EXPRESSION", ResolveOrderBy(sortKey), StringComparison.Ordinal);
         cmd.Parameters.AddWithValue("$source", sourceId.GetValueOrDefault());
         cmd.Parameters.AddWithValue("$folder", folderPath is null ? "" :
             EscapeLike(NormalizeFolder(folderPath).TrimEnd(Path.DirectorySeparatorChar) +
@@ -342,7 +412,8 @@ public sealed class LibraryDatabase
                 reader.GetInt64(5), reader.GetInt64(6),
                 reader.IsDBNull(7) ? null : reader.GetInt32(7),
                 reader.IsDBNull(8) ? null : reader.GetInt32(8) != 0,
-                reader.GetInt64(9) != 0));
+                reader.GetInt64(9) != 0,
+                reader.GetInt64(10)));
         }
         return result;
     }

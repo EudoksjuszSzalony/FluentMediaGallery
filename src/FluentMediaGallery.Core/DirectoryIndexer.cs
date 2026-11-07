@@ -41,7 +41,8 @@ public sealed class DirectoryIndexer(LibraryDatabase database)
                         var kind = MediaFormats.Identify(item);
                         if (!kind.HasValue) continue;
                         var info = new FileInfo(item);
-                        batch.Add(new MediaFile(item, info.Name, kind.Value, info.Length, info.LastWriteTimeUtc.Ticks));
+                        batch.Add(new MediaFile(item, info.Name, kind.Value, info.Length, info.LastWriteTimeUtc.Ticks,
+                            info.CreationTimeUtc.Ticks));
                         scanned++;
                         if (batch.Count >= 512)
                         {

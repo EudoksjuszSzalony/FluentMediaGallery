@@ -41,6 +41,15 @@ try
         "non-existent source is empty");
     Check((await database.GetPageAsync(0, 100, sourceId: source.Id)).Count == 2,
         "paged source filter works");
+    await database.SetViewPreferenceAsync("folder:" + root, "name-desc", "river");
+    var prefs = await database.GetViewPreferenceAsync("folder:" + root);
+    Check(prefs.SortKey == "name-desc" && prefs.LayoutKey == "river", "sort/layout preference persists");
+    Check((await database.GetViewPreferenceAsync("folder:" + root + "\\other")).SortKey == "modified-desc",
+        "nested folder has independent default sort");
+    Check((await database.GetPageAsync(0, 100, sourceId: source.Id, sortKey: "name-desc"))[0].Name == "two.mkv",
+        "name-desc ordering works");
+    Check((await database.GetPageAsync(0, 100, sourceId: source.Id, sortKey: "name-asc"))[0].Name == "one.jpg",
+        "name-asc ordering works");
     Check((await database.GetPageAsync(0, 100, sourceId: -999)).Count == 0,
         "paged source exclusion works");
     Check(await database.CountFilteredAsync(search: "one") == 1,
