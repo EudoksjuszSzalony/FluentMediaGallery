@@ -64,6 +64,21 @@ try
         "filtered count follows search");
     var firstPage = await database.GetPageAsync(0, 100);
     var photo = firstPage.Single(x => x.Name == "one.jpg");
+    Check(photo.PixelWidth == 0 && photo.PixelHeight == 0,
+        "dimensions start uncached without source file decoding");
+    Check(await database.CacheImageDimensionsAsync(new[]
+    {
+        new MediaDimension(photo.Id, photo.LastWriteUtcTicks - 1, photo.Size, 1920, 1080),
+        new MediaDimension(photo.Id, photo.LastWriteUtcTicks, photo.Size, 1920, 1080)
+    }) == 1, "stale dimension probes are rejected");
+    Check((await database.GetByIdAsync(photo.Id))?.PixelWidth == 1920,
+        "image width and height cached in SQLite");
+    Check((await database.GetPageAsync(0, 100)).Single(x => x.Id == photo.Id).PixelHeight == 1080,
+        "gallery pagination returns persisted dimensions");
+    await scanner.ScanAsync(source);
+    Check((await database.GetByIdAsync(photo.Id))?.PixelWidth == 1920,
+        "unchanged rescan preserves cached image dimensions");
+
     await database.SetFavoriteOverrideAsync(photo.Id, true);
     Check((await database.GetPageAsync(0, 100, favoritesOnly: true)).Count == 1, "favorite override persists");
     Check(await database.CountFilteredAsync(favoritesOnly: true) == 1,

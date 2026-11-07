@@ -64,6 +64,8 @@ public sealed class LibraryDatabase
                 size INTEGER NOT NULL,
                 modified_ticks INTEGER NOT NULL,
                 created_ticks INTEGER NOT NULL DEFAULT 0,
+                pixel_width INTEGER NOT NULL DEFAULT 0,
+                pixel_height INTEGER NOT NULL DEFAULT 0,
                 seen_generation INTEGER NOT NULL DEFAULT 0,
                 missing INTEGER NOT NULL DEFAULT 0,
                 rating_raw INTEGER,
@@ -76,6 +78,8 @@ public sealed class LibraryDatabase
                 ON media(missing, modified_ticks DESC, id DESC);
             CREATE INDEX IF NOT EXISTS ix_media_source
                 ON media(source_id, seen_generation);
+            CREATE INDEX IF NOT EXISTS ix_media_source_browse
+                ON media(source_id, missing, modified_ticks DESC, id DESC);
             CREATE INDEX IF NOT EXISTS ix_media_rating_pending
                 ON media(rating_checked, missing, id);
             """;
@@ -105,6 +109,18 @@ public sealed class LibraryDatabase
         {
             using var alter = connection.CreateCommand();
             alter.CommandText = "ALTER TABLE media ADD COLUMN created_ticks INTEGER NOT NULL DEFAULT 0;";
+            await alter.ExecuteNonQueryAsync(ct);
+        }
+        if (!columns.Contains("pixel_width"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE media ADD COLUMN pixel_width INTEGER NOT NULL DEFAULT 0;";
+            await alter.ExecuteNonQueryAsync(ct);
+        }
+        if (!columns.Contains("pixel_height"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE media ADD COLUMN pixel_height INTEGER NOT NULL DEFAULT 0;";
             await alter.ExecuteNonQueryAsync(ct);
         }
         using (var index = connection.CreateCommand())
@@ -285,6 +301,10 @@ public sealed class LibraryDatabase
                 size=excluded.size,
                 modified_ticks=excluded.modified_ticks,
                 created_ticks=excluded.created_ticks,
+                pixel_width=CASE WHEN media.size=excluded.size AND media.modified_ticks=excluded.modified_ticks
+                    THEN media.pixel_width ELSE 0 END,
+                pixel_height=CASE WHEN media.size=excluded.size AND media.modified_ticks=excluded.modified_ticks
+                    THEN media.pixel_height ELSE 0 END,
                 seen_generation=excluded.seen_generation,
                 missing=0;
             """;
@@ -324,6 +344,47 @@ public sealed class LibraryDatabase
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+
+    /// <summary>
+    /// Persist cached photo dimensions in a single transaction. The WHERE guard
+    /// prevents stale asynchronous probes from overwriting a newer index scan.
+    /// No source media or Windows rating metadata is written.
+    /// </summary>
+    public async Task<int> CacheImageDimensionsAsync(
+        IReadOnlyList<MediaDimension> measurements, CancellationToken ct = default)
+    {
+        if (measurements.Count == 0) return 0;
+        await using var connection = await OpenAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.Transaction = (SqliteTransaction)transaction;
+        cmd.CommandText = """
+            UPDATE media SET pixel_width=$width, pixel_height=$height
+            WHERE id=$id AND modified_ticks=$modified AND size=$size
+              AND pixel_width=0 AND pixel_height=0 AND missing=0;
+            """;
+        var id = cmd.Parameters.Add("$id", SqliteType.Integer);
+        var modified = cmd.Parameters.Add("$modified", SqliteType.Integer);
+        var size = cmd.Parameters.Add("$size", SqliteType.Integer);
+        var width = cmd.Parameters.Add("$width", SqliteType.Integer);
+        var height = cmd.Parameters.Add("$height", SqliteType.Integer);
+        cmd.Prepare();
+        var updated = 0;
+        foreach (var d in measurements)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (d.Width <= 0 || d.Height <= 0 || d.Width > 100000 || d.Height > 100000)
+                continue;
+            id.Value = d.Id;
+            modified.Value = d.ModifiedUtcTicks;
+            size.Value = d.Size;
+            width.Value = d.Width;
+            height.Value = d.Height;
+            updated += await cmd.ExecuteNonQueryAsync(ct);
+        }
+        await transaction.CommitAsync(ct);
+        return updated;
+    }
 
     private static string ResolveOrderBy(string? sortKey) => sortKey switch
     {
@@ -385,7 +446,7 @@ public sealed class LibraryDatabase
             SELECT id, source_id, path, file_name, kind, size, modified_ticks, rating_raw,
                 favorite_override,
                 COALESCE(favorite_override, CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END) AS fav,
-                created_ticks
+                created_ticks, pixel_width, pixel_height
             FROM media WHERE missing=0
                 AND ($source=0 OR source_id=$source)
                 AND ($folder='' OR path LIKE $folder ESCAPE '\')
@@ -413,7 +474,7 @@ public sealed class LibraryDatabase
                 reader.IsDBNull(7) ? null : reader.GetInt32(7),
                 reader.IsDBNull(8) ? null : reader.GetInt32(8) != 0,
                 reader.GetInt64(9) != 0,
-                reader.GetInt64(10)));
+                reader.GetInt64(10), reader.GetInt32(11), reader.GetInt32(12)));
         }
         return result;
     }
@@ -425,7 +486,8 @@ public sealed class LibraryDatabase
         cmd.CommandText = """
             SELECT id,source_id,path,file_name,kind,size,modified_ticks,rating_raw,
                 favorite_override,
-                COALESCE(favorite_override,CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END)
+                COALESCE(favorite_override,CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END),
+                created_ticks, pixel_width, pixel_height
             FROM media WHERE id=$id;
             """;
         cmd.Parameters.AddWithValue("$id", mediaId);
@@ -434,7 +496,8 @@ public sealed class LibraryDatabase
         return new MediaEntry(reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2),
             reader.GetString(3), (MediaKind)reader.GetInt32(4), reader.GetInt64(5),
             reader.GetInt64(6), reader.IsDBNull(7) ? null : reader.GetInt32(7),
-            reader.IsDBNull(8) ? null : reader.GetInt32(8) != 0, reader.GetInt64(9) != 0);
+            reader.IsDBNull(8) ? null : reader.GetInt32(8) != 0, reader.GetInt64(9) != 0,
+            reader.GetInt64(10), reader.GetInt32(11), reader.GetInt32(12));
     }
 
     // This persists the user's choice first. File metadata synchronization is handled by FavoritesService.

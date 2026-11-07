@@ -16,11 +16,16 @@ public sealed record MediaEntry(
     int? FileRating,
     bool? FavoriteOverride,
     bool IsFavorite,
-    long CreatedUtcTicks = 0);
+    long CreatedUtcTicks = 0,
+    int PixelWidth = 0,
+    int PixelHeight = 0);
 
 public sealed record MediaFile(
     string FullPath, string Name, MediaKind Kind, long Size, long LastWriteUtcTicks,
     long CreatedUtcTicks = 0);
+
+/// <summary>Dimensions captured from a source header; only persisted for matching indexed file version.</summary>
+public sealed record MediaDimension(long Id, long ModifiedUtcTicks, long Size, int Width, int Height);
 
 public sealed record RatingCandidate(long Id, string Path);
 public sealed record FavoriteWriteCandidate(long Id, string Path, bool Favorite);
