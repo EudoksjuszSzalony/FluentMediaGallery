@@ -34,6 +34,15 @@ public static class FavoriteRatingPolicy
     // Microsoft Photos' historical favorites convention, not a general 4-or-more star threshold.
     public static bool IsLegacyFavorite(int? rawRating) => rawRating is >= 63 and <= 99;
     public static bool IsLegacyUnfavorite(int? rawRating) => rawRating is >= 1 and <= 12;
+    public static int ToStars(int rawRating) => rawRating switch
+    {
+        <= 0 => 0,
+        <= 12 => 1,
+        <= 37 => 2,
+        <= 62 => 3,
+        <= 87 => 4,
+        _ => 5
+    };
     public static bool IsFavorite(bool? appOverride, int? rawRating)
         => appOverride ?? IsLegacyFavorite(rawRating);
 }

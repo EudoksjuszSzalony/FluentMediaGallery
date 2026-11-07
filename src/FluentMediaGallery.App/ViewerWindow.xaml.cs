@@ -142,7 +142,7 @@ public sealed partial class ViewerWindow : Window
         DetailsTypeText.Text = media.Kind == MediaKind.Video ? "Film" : "Zdjęcie";
         DetailsSizeText.Text = $"{media.Size / 1024d / 1024d:0.##} MB";
         DetailsRatingText.Text = media.FileRating.HasValue
-            ? $"Klasyfikacja: {Math.Clamp((media.FileRating.Value + 12) / 25, 0, 5)} ★ ({media.FileRating}/99)"
+            ? $"Klasyfikacja: {FavoriteRatingPolicy.ToStars(media.FileRating.Value)} ★ ({media.FileRating}/99)"
             : "Klasyfikacja: brak / nieodczytana";
         DetailsPathText.Text = media.FullPath;
         Status.Text = media.FullPath;
@@ -152,6 +152,7 @@ public sealed partial class ViewerWindow : Window
         _imageWidth = 0;
         _imageHeight = 0;
         _fitToWindow = true;
+        ZoomLabel.Text = "—%";
 
         try
         {
@@ -212,6 +213,15 @@ public sealed partial class ViewerWindow : Window
         RecalculateFit();
         if (_fitToWindow) FitToWindow();
         else ChangeZoom(_currentPercent, animate: false);
+        // Retry after the image's layout pass: ChangeView can be rejected when
+        // the ScrollViewer has not measured its new content yet.
+        _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            if (!_ready || !ReferenceEquals(FullImage.Source, bitmap) || !_fitToWindow)
+                return;
+            RecalculateFit();
+            FitToWindow();
+        });
     }
 
     private void PhotoSurface_SizeChanged(object sender, SizeChangedEventArgs e)

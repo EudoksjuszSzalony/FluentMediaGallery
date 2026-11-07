@@ -7,6 +7,9 @@ static void Check(bool condition, string reason)
 }
 
 Check(FavoriteRatingPolicy.IsLegacyFavorite(75), "4-star rating 75 imports as favorite");
+Check(FavoriteRatingPolicy.ToStars(75) == 4, "75 raw rating displays four stars");
+Check(FavoriteRatingPolicy.ToStars(99) == 5, "99 raw rating displays five stars");
+Check(FavoriteRatingPolicy.ToStars(1) == 1, "1 raw rating displays one star");
 Check(FavoriteRatingPolicy.IsLegacyFavorite(63), "4-star low boundary 63");
 Check(FavoriteRatingPolicy.IsLegacyFavorite(99), "5 stars import as favorites");
 Check(FavoriteRatingPolicy.IsLegacyFavorite(88), "5 stars lower bound imports as favorites");
