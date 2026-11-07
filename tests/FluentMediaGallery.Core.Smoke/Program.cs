@@ -43,6 +43,11 @@ try
     await database.CompleteFavoriteFileWriteAsync(photo.Id, true, 99);
     Check(!(await database.GetFavoriteWriteStateAsync(photo.Id)).Pending, "success clears pending metadata");
     Check((await database.GetByIdAsync(photo.Id))?.FileRating == 99, "5-star rating stored in index");
+    await database.SetFavoriteOverrideAsync(photo.Id, null);
+    Check((await database.GetPageAsync(0, 100, favoritesOnly: true)).Count == 1,
+        "five-star unoverridden file appears in favorites filter");
+    await database.SetFavoriteOverrideAsync(photo.Id, true);
+    await database.CompleteFavoriteFileWriteAsync(photo.Id, true, 99);
     Check((await database.GetPageAsync(0, 100, search: "one")).Count == 1, "search works");
 
     var dbReopened = new LibraryDatabase(database.DatabasePath);

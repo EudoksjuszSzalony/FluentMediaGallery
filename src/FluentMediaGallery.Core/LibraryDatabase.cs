@@ -213,7 +213,7 @@ public sealed class LibraryDatabase
                 COALESCE(favorite_override, CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END) AS fav
             FROM media WHERE missing=0
                 AND ($favorites=0 OR COALESCE(favorite_override,
-                    CASE WHEN rating_raw BETWEEN 63 AND 87 THEN 1 ELSE 0 END)=1)
+                    CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END)=1)
                 AND ($search='' OR file_name LIKE $search ESCAPE '\')
             ORDER BY modified_ticks DESC, id DESC LIMIT $limit OFFSET $offset;
             """;
