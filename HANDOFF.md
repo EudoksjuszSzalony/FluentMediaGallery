@@ -234,3 +234,12 @@ NEXT STEPS:
 - User-provided screenshot after prior mosaic/viewer stage confirms the image viewer runs and has filmstrip above the zoom/properties bar; requested a **shorter bottom bar**, without changing the thumbnail row.
 - Source change: `ViewerWindow.xaml` last Grid.RowDefinition reduced from 54 DIP to **36 DIP**; grid Padding 10,2→8,0 and ColumnSpacing 5→4, status text margins reduced slightly; Fit/+/− controls explicitly 28 DIP high (MinHeight=0), slider 28 DIP high. Dimensions and file size text remain readable at unchanged font sizes, selection border and filmstrip 90 DIP untouched.
 - This is XAML-only; no Core/schema/dependency changes. Source committed to develop; new Dominator build/screenshot NOT YET verified. Verify buttons/slider not clipped at user DPI setting and filmstrip unchanged. No GitHub Actions invoked or user data touched.
+
+
+## 2026-11-07 — Dominator visual confirmation: mosaic Rzeka WORKS
+
+- User explicitly confirmed **"rzeka działa"** with screenshots from the main Dominator (not VM). Mark the **new variable-size Rzeka mosaic as visually verified/working**: the screenshot shows a large feature photo spanning the height of two adjacent smaller photos and subsequent mosaics without the old month-based single-image full-width bands.
+- Separate viewer screenshot also shows a working single toolbar, filmstrip above the shorter bottom zoom/properties bar, and readable `1920 × 1080 px · JPG` with file size. This is evidence that these parts render on the main computer; user did **not** provide a build log or a full check of panel transitions, all shortcuts, file metadata writes or large-library performance in this turn.
+- In the previous section, "NOT YET COMPILED OR TESTED ON DOMINATOR" describes the state **before** this new user feedback; the mosaic feature is now confirmed visually. Avoid repeating that old status as the current state.
+- No newly requested code changes in this feedback. Continue normal development from this working mosaic baseline; visual similarity to Windows Photos can be refined without rewriting its working band layout.
+- Remaining work: performance/memory at 201k+ items, gradual row reflow, dimension caching in SQLite, EXIF dates, video playback, SMB reconciliation, on-copy System.Rating read-back validation. Do not conflate screenshots with an exhaustive QA pass.
