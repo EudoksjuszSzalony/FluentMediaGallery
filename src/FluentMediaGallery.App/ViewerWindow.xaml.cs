@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics.Imaging;
 using Windows.ApplicationModel.DataTransfer;
@@ -56,6 +57,10 @@ public sealed partial class ViewerWindow : Window
     private int _selectedLocalIndex = -1;
     private Storyboard? _previousFade;
     private Storyboard? _nextFade;
+    private Storyboard? _filmstripAnimation;
+    private Storyboard? _detailsAnimation;
+    private Storyboard? _imageSlide;
+    private int _slideDirection;
 
     public ViewerWindow(LibraryDatabase database, FavoritesService favorites,
         ShellThumbnailCache thumbnailCache, GalleryViewContext context, Action onFavoriteChanged)
@@ -140,6 +145,9 @@ public sealed partial class ViewerWindow : Window
         DetailsNameText.Text = media.Name;
         DetailsTypeText.Text = media.Kind == MediaKind.Video ? "Film" : "Zdjęcie";
         DetailsSizeText.Text = $"{media.Size / 1024d / 1024d:0.##} MB";
+        FileSizeLabel.Text = media.Size >= 1024L * 1024
+            ? $"{media.Size / 1048576d:0.##} MB"
+            : $"{media.Size / 1024d:0} KB";
         DetailsRatingText.Text = media.FileRating.HasValue
             ? $"Klasyfikacja: {FavoriteRatingPolicy.ToStars(media.FileRating.Value)} ★ ({media.FileRating}/99)"
             : "Klasyfikacja: brak / nieodczytana";
@@ -175,6 +183,7 @@ public sealed partial class ViewerWindow : Window
                     if (ticket != _loadVersion || !_ready) return;
                     FullImage.Source = image;
                     SetImageFitDimensions(image);
+                    SlidePhotoFromSide();
                     ImageMessage.Text = "Film — podgląd klatki; odtwarzacz wideo jest jeszcze w przygotowaniu.";
                 }
                 if (ticket == _loadVersion && _ready)
@@ -222,6 +231,7 @@ public sealed partial class ViewerWindow : Window
             if (ticket != _loadVersion || !_ready) return;
             FullImage.Source = bitmap;
             SetImageFitDimensions(bitmap);
+            SlidePhotoFromSide();
             var displayedWidth = originalWidth > 0 ? originalWidth : (uint)bitmap.PixelWidth;
             var displayedHeight = originalHeight > 0 ? originalHeight : (uint)bitmap.PixelHeight;
             Status.Text = $"{displayedWidth:N0} × {displayedHeight:N0} px  ·  {format}";
@@ -389,6 +399,7 @@ public sealed partial class ViewerWindow : Window
         _navigating = true;
         try
         {
+            _slideDirection = direction;
             _offset = next;
             await ShowCurrentAsync();
         }
@@ -401,20 +412,138 @@ public sealed partial class ViewerWindow : Window
 
     private void FilmstripToggle_Click(object sender, RoutedEventArgs e) => ToggleFilmstrip();
 
+    private static Storyboard AnimatePanel(UIElement target, bool appearing,
+        double horizontalOffset, double verticalOffset, int durationMs,
+        Action? onCompleted = null)
+    {
+        var transform = target.RenderTransform as TranslateTransform;
+        if (transform is null)
+        {
+            transform = new TranslateTransform();
+            target.RenderTransform = transform;
+        }
+
+        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var storyboard = new Storyboard();
+
+        var opacity = new DoubleAnimation
+        {
+            From = appearing ? 0 : 1, To = appearing ? 1 : 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+            EasingFunction = easing
+        };
+        Storyboard.SetTarget(opacity, target);
+        Storyboard.SetTargetProperty(opacity, "Opacity");
+        storyboard.Children.Add(opacity);
+
+        var x = new DoubleAnimation
+        {
+            From = appearing ? horizontalOffset : 0,
+            To = appearing ? 0 : horizontalOffset,
+            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+            EasingFunction = easing
+        };
+        Storyboard.SetTarget(x, transform);
+        Storyboard.SetTargetProperty(x, "X");
+        storyboard.Children.Add(x);
+
+        var y = new DoubleAnimation
+        {
+            From = appearing ? verticalOffset : 0,
+            To = appearing ? 0 : verticalOffset,
+            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+            EasingFunction = easing
+        };
+        Storyboard.SetTarget(y, transform);
+        Storyboard.SetTargetProperty(y, "Y");
+        storyboard.Children.Add(y);
+
+        if (onCompleted is not null)
+            storyboard.Completed += (_, _) => onCompleted();
+        storyboard.Begin();
+        return storyboard;
+    }
+
+    private void SlidePhotoFromSide()
+    {
+        _imageSlide?.Stop();
+        var direction = _slideDirection;
+        _slideDirection = 0;
+        if (direction == 0 || !_ready) return;
+
+        // A restrained sideways movement, without photo zoom/fade transitions.
+        var transform = FullImage.RenderTransform as TranslateTransform;
+        if (transform is null)
+        {
+            transform = new TranslateTransform();
+            FullImage.RenderTransform = transform;
+        }
+
+        var slide = new DoubleAnimation
+        {
+            From = direction > 0 ? 22d : -22d,
+            To = 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(130)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        Storyboard.SetTarget(slide, transform);
+        Storyboard.SetTargetProperty(slide, "X");
+        var animation = new Storyboard();
+        animation.Children.Add(slide);
+        _imageSlide = animation;
+        animation.Begin();
+    }
+
     private void ToggleFilmstrip()
     {
         _filmstripVisible = !_filmstripVisible;
-        FilmstripBorder.Visibility = _filmstripVisible ? Visibility.Visible : Visibility.Collapsed;
-        FilmstripRow.Height = new GridLength(_filmstripVisible ? 90 : 0);
-        FilmstripButton.Content = _filmstripVisible ? "Pasek ✓ (F)" : "Pasek (F)";
+        var showing = _filmstripVisible;
+        _filmstripAnimation?.Stop();
+
+        if (showing)
+        {
+            FilmstripRow.Height = new GridLength(90);
+            FilmstripBorder.Visibility = Visibility.Visible;
+            _filmstripAnimation = AnimatePanel(FilmstripBorder, true,
+                0, 18, 190);
+        }
+        else
+        {
+            _filmstripAnimation = AnimatePanel(FilmstripBorder, false,
+                0, 18, 160, () =>
+                {
+                    if (_filmstripVisible) return;
+                    FilmstripBorder.Visibility = Visibility.Collapsed;
+                    FilmstripRow.Height = new GridLength(0);
+                });
+        }
+        FilmstripButton.Content = showing ? "Pasek ✓ (F)" : "Pasek (F)";
     }
 
     private void DetailsToggle_Click(object sender, RoutedEventArgs e)
     {
         _detailsVisible = !_detailsVisible;
-        DetailsPane.Visibility = _detailsVisible ? Visibility.Visible : Visibility.Collapsed;
-        DetailsPaneColumn.Width = new GridLength(_detailsVisible ? 290 : 0);
-        DetailsButton.Content = _detailsVisible ? "ⓘ Szczegóły ✓" : "ⓘ Szczegóły";
+        var showing = _detailsVisible;
+        _detailsAnimation?.Stop();
+
+        if (showing)
+        {
+            DetailsPaneColumn.Width = new GridLength(290);
+            DetailsPane.Visibility = Visibility.Visible;
+            _detailsAnimation = AnimatePanel(DetailsPane, true,
+                26, 0, 190);
+        }
+        else
+        {
+            _detailsAnimation = AnimatePanel(DetailsPane, false,
+                26, 0, 160, () =>
+                {
+                    if (_detailsVisible) return;
+                    DetailsPane.Visibility = Visibility.Collapsed;
+                    DetailsPaneColumn.Width = new GridLength(0);
+                });
+        }
+        DetailsButton.Content = showing ? "ⓘ Szczegóły ✓" : "ⓘ Szczegóły";
     }
 
     private async void Filmstrip_ItemClick(object sender, ItemClickEventArgs e)
@@ -425,6 +554,7 @@ public sealed partial class ViewerWindow : Window
         if (index < 0) return;
         var requested = (_offset / PageSize) * PageSize + index;
         if (requested == _offset || requested >= _total) return;
+        _slideDirection = requested > _offset ? 1 : -1;
         _offset = requested;
         await ShowCurrentAsync();
     }
