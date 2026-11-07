@@ -36,3 +36,12 @@ Never auto-register every Windows picture library, network share or visible fold
 
 ## GitHub Actions
 No push or pull_request workflows during development. Use local tests; reserve Actions for releases/assets later.
+
+## Initial WinUI 3 source (2026-11-07)
+
+- `FluentMediaGallery.App`: Windows App SDK 2.6.5, .NET 10, unpackaged / self-contained Windows App Runtime.
+- **Committed but not yet compiled/tested on the main PC.** Currently displays 100-row pages from SQLite in a standard WinUI ListView, not actual photo thumbnails.
+- User chooses specific local or UNC path; registration does not scan. A manual button performs a background scan; cancellation preserves prior records.
+- Source-aware DB queries support page filtering, favorites filter, filename search and count. Manual classification import via bounded batches is provided; does not run on app startup.
+- Explicit favorite button writes SQLite first and then tries to persist System.Rating, after one-time in-app warning. Test ONLY against copied source media until validated.
+- Next phase: reliable WinUI build, virtualized thumbnail tiles, local cache, in-app viewer, sources UI, video player and safe watcher/SMB reconciliation.

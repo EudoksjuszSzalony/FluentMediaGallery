@@ -1,48 +1,32 @@
 # FluentMediaGallery
 
-Open-source Windows 11 photo and video gallery planned in WinUI 3. Optimized for large libraries, multiple local directories and user-selected SMB/UNC shares.
+Open-source Windows 11 photo/video gallery, based on WinUI 3 and SQLite. The goal is a fast alternative to Microsoft Photos for a library of 201,705 media files and beyond.
 
-> **Status: early development.** A functional Core library exists; the Windows GUI, media player, thumbnail cache and installer are not implemented yet. Do not treat this as a production release.
+> **Early preview source code.** There is now an initial WinUI 3 app project, but its compilation and GUI behavior are **not yet verified on Dominator**. The thumbnail grid, in-app photo viewer, video player and installer are still pending.
 
-## Product goals
+## Implemented in source
 
-- Fluent Windows 11-style grid, photo/video viewer, bottom filmstrip and visible favorite-heart control.
-- Favorites for photos **and videos**, read from Windows `System.Rating`: 4 or 5 stars = favorite; 1 star = not favorite.
-- User favorite changes attempt to write back 4 stars (preserving existing 5) or 1 star, with read-back verification. SQLite retains pending writes/errors for unsupported formats.
-- SQLite-backed persistent catalogue, rapid startup, virtualized paging, incremental/offline-safe reconciliation and bounded thumbnail cache.
-- User-selected local/removable/UNC-SMB roots only; never auto-import every share or Windows Photos library.
-- Video playback with seeking, subtitles, audio tracks, fullscreen (future LibVLCSharp.WinUI).
-- Scale baseline: **158,267 photos + 43,438 videos = 201,705 files**; design target ≥1 million.
+- Persistent SQLite WAL media index, rescan with missing-file safeguards and offline NAS protection.
+- Local and UNC/SMB path registration, only for user-selected source folders.
+- Core rating read/write support using Windows `System.Rating`, file write verification and SQLite fallback.
+- Favorites: **4 and 5 stars count as favorites**, removal writes **1 star**. Existing 5-star classification is preserved when favoriting.
+- New unpackaged WinUI 3 preview: three-panel UI, manual source registration and manual background indexing with cancellation; SQLite pages of 100, file-name search, source and favorites filtering, details, explicit favorites toggle with warning and manual rating import.
 
-## Source and project guidance
+### Not yet implemented
 
-- [HANDOFF.md](HANDOFF.md) — **living record** of decisions, completed/untested work, bugs, test evidence and next steps; mandatory at the start of a new chat.
-- [AGENTS.md](AGENTS.md) — repository and safety rules.
-- [docs/PROJECT_CUSTOM_INSTRUCTIONS.md](docs/PROJECT_CUSTOM_INSTRUCTIONS.md) — copyable project-level ChatGPT instructions.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — roadmap and design constraints.
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — Dominator workflow and cleanup policy.
-- [scripts/Cleanup-DevelopmentArtifacts.ps1](scripts/Cleanup-DevelopmentArtifacts.ps1) — **preview-first** optional cleanup of obsolete bin/obj/TestResults folders only.
+- Real thumbnails, thumbnail disk cache and tiled/virtualized gallery.
+- Integrated image viewer, filmstrip, video player and full playback controls.
+- Live FileSystemWatcher, local USN recovery, SMB re-sync after shutdown, thumbnail cache invalidation.
+- Installer, release assets and validated GUI performance on the real media library.
 
-## Current implementation
+## Development and safety
 
-`FluentMediaGallery.Core` targets .NET 10 Windows and contains SQLite WAL with migration, streaming folder indexing, offline safety, read/write Windows Property System `System.Rating`, favorites state with pending retries, and a Windows Core smoke test. A user-run earlier test at commit `595b5e44` passed the build and all smoke checks. The former `NU1903` dependency warning prompted an update to `Microsoft.Data.Sqlite 10.0.14`, which **still needs local retesting** on the Dominator.
+All routine work takes place on `develop`; `main` is for verified stable releases. GitHub Actions **do not run** for push/pull-request; reserve them for releases. User tests on the **Dominator Windows PC**, not on the auxiliary Remote Desktop Commander VM.
 
-## Local build and verification
+Read [HANDOFF.md](HANDOFF.md) before every session. Also see [AGENTS.md](AGENTS.md), [development instructions](docs/DEVELOPMENT.md), and [architecture](docs/ARCHITECTURE.md).
 
-On **Dominator** with .NET 10 SDK, run in **PowerShell as USER** (not administrator), from repository root:
+The user has verified **Core** on Dominator with `Microsoft.Data.Sqlite 10.0.14` and SQLitePCLRaw 2.1.13: successful restore, vulnerability audit, build and Core smoke tests without warnings. The **new UI project and updated Core query tests still require local compilation**.
 
-```powershell
-& {
-    $ErrorActionPreference = 'Stop'
-    dotnet build .\src\FluentMediaGallery.Core\FluentMediaGallery.Core.csproj -c Release
-    if ($LASTEXITCODE -ne 0) { throw 'Core build failed' }
-    dotnet run --project .\tests\FluentMediaGallery.Core.Smoke\FluentMediaGallery.Core.Smoke.csproj -c Release
-    if ($LASTEXITCODE -ne 0) { throw 'Core smoke tests failed' }
-}
-```
+To test the new app, open `src/FluentMediaGallery.App/FluentMediaGallery.App.csproj` with the Windows .NET 10 SDK/Windows App SDK toolchain and build Release. The UI is unpackaged and self-contained for Windows App SDK runtime. First use **copies of media** in a small local test folder, never the entire personal library. An explicit favorite change may attempt to write file metadata.
 
-GitHub Actions **do not run on routine pushes or PRs**. Reserve Actions for explicitly approved releases and assets. Any metadata-write experiments should use **copies** of real media files, never the live collection.
-
-## Privacy and license
-
-Media, SQLite index and thumbnail cache belong outside the Git repository, under `%LOCALAPPDATA%\FluentMediaGallery`. No cloud account or telemetry is required. Original file metadata is only modified by an explicit favorite toggle, if the Windows file handler permits it. MIT license applies to source; future codecs need their own license notices.
+No original media or database belongs in Git. User data/index is under `%LOCALAPPDATA%\FluentMediaGallery`. MIT license governs the project code; video codecs will carry separate notices.

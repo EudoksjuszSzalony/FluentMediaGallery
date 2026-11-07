@@ -34,18 +34,18 @@ Free public Windows 11 Fluent Photos-like gallery, with native WinUI 3 UI, photo
 
 - FluentMediaGallery.Core: LibraryDatabase SQLite WAL and migrations, DirectoryIndexer streaming scan/offline safety, MediaModels, ShellRatingReader/Writer, FavoritesService, RatingImportService.
 - Windows-only Core.Smoke tests cover initial scan, persisted DB and favorite overrides, 4/5-star policies, pending file writes, missing files and offline source handling.
-- There is NO usable WinUI GUI, video player, thumbnail cache or installation package yet; these are planned.
-- On Dominator, previous code at **595b5e44b6d8976bf402022aae05da961f5645d1**: **Build PASS, ALL CORE SMOKE TESTS PASSED**. That build showed **NU1903** for transitive SQLitePCLRaw.lib.e_sqlite3 2.1.11.
-- This batch changes Microsoft.Data.Sqlite from 10.0.0 to **10.0.14**, which depends on SQLitePCLRaw >= 2.1.13. **Updated dependency NOT YET BUILT/TESTED on Dominator**. Confirm restore, package vulnerability scan, build and smoke tests; do not suppress warnings.
+- A native, **unpackaged WinUI 3 App source project is now committed**: `src/FluentMediaGallery.App`, using Windows App SDK **2.6.5** and .NET 10. It provides source registration, explicit folder scans with cancel, paged SQLite browsing (100/page), source filtering, filename search, favorites filter, read-only classification importing, file-details panel, and explicit heart toggle with a metadata-writing confirmation. **Not yet built/launched/tested on Dominator**. It currently displays file rows, NOT actual photo thumbnails/preview or video playback. The UI and WinUI dependency are not verified until a local build.
+- On Dominator, user confirmed at commit **da4906ff5ee1a05e85205e905855485b903c70af**: Git pull/restore PASS, NuGet vulnerability audit PASS (zero vulnerable dependencies), Core build PASS without warning, **ALL CORE SMOKE TESTS PASSED** (2026-11-07). No actual in-file metadata write was tested.
+- SQLite dependency updated to **Microsoft.Data.Sqlite 10.0.14**, resolving SQLitePCLRaw to **2.1.13**. Dominator restore/build/audit/smoke all PASS and NU1903 is gone. Do not downgrade or suppress vulnerability warnings. Subsequent Core source-filter changes and the WinUI 3 application are **NOT YET compiled/tested**.
 - GitHub Actions removed; no automatic CI runs.
 
 ## Next steps, ordered
 
-1. Pull latest develop on Dominator with --ff-only, restore, build and audit transitive NuGet packages. Verify warning NU1903 is gone and run Core smoke tests; report complete output.
-2. Exercise System.Rating on COPIES: 1-star, 4-star, 5-star JPGs and videos. Verify on-disk persistence, changed timestamps and unsupported formats.
-3. Implement actual WinUI 3 window with selected folder roots, SQLite-backed paginated grid, offline/error states and responsive loading.
-4. Add lazy thumbnail cache, viewer and visible favorite UI, then incremental watching, full video playback, tests and packaging.
-5. Update HANDOFF.md with exact commit, new decisions, test evidence, blockers and next actions whenever development changes.
+1. On Dominator: pull latest develop, restore and build `src/FluentMediaGallery.App/FluentMediaGallery.App.csproj`, run Core smoke tests (new source filtering checks). Check WinUI 3 runtime/dependency issues. Launch the GUI manually and verify window, add a **tiny COPY-only test folder**, index, pagination, source selection/search, favorites filter. **Do not index the 201k library yet.**
+2. Exercise Windows System.Rating on COPIES: 1-star, 4-star, 5-star JPGs and representative videos. Confirm actual read/write, on-disk persistence and failure behavior; avoid manipulating original media.
+3. Once GUI build/runtime works, implement thumbnail cache, full photo preview, viewer filmstrip and an actually virtualized grid. Current UI is an indexed LIST, not a visual tile gallery.
+4. Harden source overlap protection, cancellation/restart, background rating importing, watcher/USN/SMB reconciliation and error retry. Do not mass-index network shares until safe.
+5. Implement full video playback, tests and packaging; maintain HANDOFF after each substantive commit.
 
 ## Known architectural risks
 
@@ -54,3 +54,13 @@ Free public Windows 11 Fluent Photos-like gallery, with native WinUI 3 UI, photo
 - User source changes must not cause accidental data loss (DB migration, partial scans, overlapping roots).
 - Retry pending writes with backoff; guard media mutation and file integrity.
 - Don't spend time on redundant remote verification. Give user concise local steps; change real code before repeatedly retesting.
+
+## Session update — 2026-11-07, UI stage (commits 0078e3f, 8a7d680, cec54c9)
+
+- Added Core source-id filtering and filtered count SQL, and regression smoke checks for per-source paging/count.
+- Added first actual WinUI 3 source code: app shell, local/UNC source text input, manual scan/cancel, SQLite page of 100 rows, name search, favorites filter, click-to-view metadata, explicit favorite action, manual classification importer.
+- App is **unpackaged**, WinAppSDKSelfContained=true, Microsoft.WindowsAppSDK=2.6.5 and Windows.SDK.BuildTools=10.0.28000.2705. First GUI compilation on Dominator is a REQUIRED next gate; no user GUI validation has happened.
+- Static check verified all 15 XAML event handlers are present and all named controls are referenced; this is NOT a compile or UX test.
+- No automatic scanning or metadata modification on launch. Registering a source doesn't scan it. The first favorite change warns before attempting file metadata write. User must test only on media COPIES.
+- Not implemented: thumbnail tiles/cache, image viewer, filmstrip, video playback, source removal, background watchers, automatic startup reconciliation, installers.
+- Cleanup: keep bin/obj for incremental builds until clearly unnecessary. Existing cleanup script is preview-first.
