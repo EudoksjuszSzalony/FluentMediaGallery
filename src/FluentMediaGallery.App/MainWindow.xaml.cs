@@ -234,7 +234,27 @@ public sealed partial class MainWindow : Window
         // gallery sessions. A failed cache write must not block photo browsing.
         if (built.DimensionsToCache.Count != 0)
         {
-            try { await _database.CacheImageDimensionsAsync(built.DimensionsToCache); }
+            try
+            {
+                await _database.CacheImageDimensionsAsync(built.DimensionsToCache);
+                if (version != _riverGeneration) return;
+
+                // Also refresh in-memory records. Otherwise a resize would
+                // rewrite the same cached dimensions again and again until
+                // the next SQLite page reload.
+                var byId = built.DimensionsToCache.ToDictionary(d => d.Id);
+                foreach (var row in _rows)
+                {
+                    if (!byId.TryGetValue(row.Entry.Id, out var d) ||
+                        row.Entry.LastWriteUtcTicks != d.ModifiedUtcTicks ||
+                        row.Entry.Size != d.Size) continue;
+                    row.UpdateEntry(row.Entry with
+                    {
+                        PixelWidth = d.Width,
+                        PixelHeight = d.Height
+                    });
+                }
+            }
             catch (Exception ex)
             {
                 OperationStatus.Text = "Cache wymiarów zdjęć: " + ex.Message;
@@ -320,7 +340,11 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            OperationStatus.Text = "Błąd odczytu galerii: " + ex.Message;
+            if (version == _queryVersion)
+            {
+                _suppressScrollPaging = false;
+                OperationStatus.Text = "Błąd odczytu galerii: " + ex.Message;
+            }
         }
     }
 
