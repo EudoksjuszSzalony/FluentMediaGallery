@@ -24,6 +24,9 @@ public sealed record RiverRow(string Header, IReadOnlyList<RiverTile> Tiles,
             : Microsoft.UI.Xaml.Visibility.Visible;
 }
 
+public sealed record RiverBuildResult(
+    IReadOnlyList<RiverRow> Rows, IReadOnlyList<MediaDimension> DimensionsToCache);
+
 /// <summary>
 /// Photos-style mosaic geometry: alternating justified image rows and two-tier
 /// bands with one enlarged image spanning both tiers. Geometric placement
@@ -33,7 +36,9 @@ public static class RiverLayout
 {
     private const double Gap = 3;
     private const double TargetRowHeight = 192;
-    private static readonly ConcurrentDictionary<string, double> Ratios =
+    // Session-level de-duplication while the SQLite write is in flight. Unlike
+    // the old dictionary, this is bounded and can't grow to 201k+ entries.
+    private static readonly ConcurrentDictionary<string, (double Ratio, int Width, int Height)> Ratios =
         new(StringComparer.OrdinalIgnoreCase);
 
     private sealed record Placement(int Index, double Left, double Top,
@@ -44,13 +49,18 @@ public static class RiverLayout
 
     public static IReadOnlyList<RiverRow> Build(IReadOnlyList<MediaRow> items,
         double viewportWidth, string rangeCaption = "")
+        => BuildWithDimensions(items, viewportWidth, rangeCaption).Rows;
+
+    public static RiverBuildResult BuildWithDimensions(IReadOnlyList<MediaRow> items,
+        double viewportWidth, string rangeCaption = "")
     {
         var result = new List<RiverRow>();
-        if (items.Count == 0) return result;
+        var measured = new List<MediaDimension>();
+        if (items.Count == 0) return new RiverBuildResult(result, measured);
         var width = Math.Max(320, viewportWidth - 16);
         var ratios = new double[items.Count];
         for (var i = 0; i < ratios.Length; i++)
-            ratios[i] = GetRatio(items[i].Entry);
+            ratios[i] = GetRatio(items[i].Entry, measured);
 
         for (var offset = 0; offset < items.Count;)
         {
@@ -84,7 +94,7 @@ public static class RiverLayout
                 tiles, width, Math.Round(selected.Height, 2)));
             offset += selected.Count;
         }
-        return result;
+        return new RiverBuildResult(result, measured);
     }
 
     private static Band? ChooseRegularRow(double[] ratios, int offset, double width)
@@ -208,26 +218,46 @@ public static class RiverLayout
         return best;
     }
 
-    private static double GetRatio(MediaEntry entry)
+    private static double GetRatio(MediaEntry entry, List<MediaDimension> dimensions)
     {
         if (entry.Kind == MediaKind.Video) return 16d / 9;
-        var key = entry.FullPath + "|" + entry.LastWriteUtcTicks;
-        return Ratios.GetOrAdd(key, _ =>
+        if (entry.PixelWidth > 0 && entry.PixelHeight > 0)
+            return Math.Clamp((double)entry.PixelWidth / entry.PixelHeight, 0.45, 4.0);
+
+        var key = entry.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + ":" + entry.LastWriteUtcTicks + ":" + entry.Size;
+        if (Ratios.Count > 4096) Ratios.Clear();
+
+        if (!Ratios.TryGetValue(key, out var info))
         {
             try
             {
-                using var img = Image.FromFile(entry.FullPath);
-                if (img.Height > 0)
-                    return Math.Clamp((double)img.Width / img.Height, 0.45, 4.0);
+                // Image.FromFile header read runs on a worker thread. Never read
+                // the complete indexed library, just the visible SQLite window.
+                using var image = Image.FromFile(entry.FullPath);
+                if (image.Width > 0 && image.Height > 0)
+                {
+                    info = (Math.Clamp((double)image.Width / image.Height, 0.45, 4.0),
+                        image.Width, image.Height);
+                    Ratios.TryAdd(key, info);
+                }
             }
             catch (Exception ex) when (
                 ex is IOException or UnauthorizedAccessException or ArgumentException
                     or OutOfMemoryException or NotSupportedException
                     or System.Runtime.InteropServices.ExternalException)
             {
-                // Offline share / unsupported decoder: display as a safe square.
+                // Temporary NAS disconnect / unsupported image codec:
+                // don't cache a failure so the next visit can retry.
             }
-            return 1;
-        });
+        }
+
+        if (info.Width > 0 && info.Height > 0)
+        {
+            dimensions.Add(new MediaDimension(entry.Id, entry.LastWriteUtcTicks,
+                entry.Size, info.Width, info.Height));
+            return info.Ratio;
+        }
+        return 1d;
     }
 }

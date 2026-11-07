@@ -217,8 +217,9 @@ public sealed partial class MainWindow : Window
             ? $"{new DateTime(_timelineMinTicks, DateTimeKind.Utc).ToLocalTime():d MMMM yyyy} – " +
               $"{new DateTime(_timelineMaxTicks, DateTimeKind.Utc).ToLocalTime():d MMMM yyyy}"
             : "";
-        var rows = await Task.Run(() => RiverLayout.Build(sample, width, rangeLabel));
+        var built = await Task.Run(() => RiverLayout.BuildWithDimensions(sample, width, rangeLabel));
         if (version != _riverGeneration || _layoutKey != "river") return;
+        var rows = built.Rows;
         // Preserve completed row visuals, thumbnails and current scroll position.
         // Only a changed final row (or the tail after a resize) is replaced.
         var common = 0;
@@ -227,6 +228,17 @@ public sealed partial class MainWindow : Window
             common++;
         while (_riverRows.Count > common) _riverRows.RemoveAt(_riverRows.Count - 1);
         for (var i = common; i < rows.Count; i++) _riverRows.Add(rows[i]);
+
+        // Save discovered aspect ratios for subsequent launches and repeated
+        // gallery sessions. A failed cache write must not block photo browsing.
+        if (built.DimensionsToCache.Count != 0)
+        {
+            try { await _database.CacheImageDimensionsAsync(built.DimensionsToCache); }
+            catch (Exception ex)
+            {
+                OperationStatus.Text = "Cache wymiarów zdjęć: " + ex.Message;
+            }
+        }
     }
 
     private static bool SameRiverRow(RiverRow a, RiverRow b)
@@ -299,7 +311,6 @@ public sealed partial class MainWindow : Window
             _rows.Clear();
             foreach (var item in items) _rows.Add(new MediaRow(item));
             UpdateGalleryProgress();
-            await RebuildRiverAsync();
             ApplyLayoutMode();
             await RebuildRiverAsync();
         }
