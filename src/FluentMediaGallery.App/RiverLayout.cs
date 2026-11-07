@@ -4,14 +4,19 @@ using FluentMediaGallery.Core;
 
 namespace FluentMediaGallery.App;
 
-public sealed record RiverTile(MediaRow Media, double ImageWidth, double ImageHeight)
+/// <summary>
+/// Placement in one virtualized mosaic band. Each tile can have a different width,
+/// height and vertical offset (not just a shared justified-row height).
+/// </summary>
+public sealed record RiverTile(MediaRow Media, double Left, double Top,
+    double ImageWidth, double ImageHeight)
 {
-    // Container includes a small gap; pixels and aspect ratio are otherwise preserved.
     public double Width => ImageWidth;
     public double Height => ImageHeight;
 }
 
-public sealed record RiverRow(string Header, IReadOnlyList<RiverTile> Tiles)
+public sealed record RiverRow(string Header, IReadOnlyList<RiverTile> Tiles,
+    double CanvasWidth, double CanvasHeight)
 {
     public Microsoft.UI.Xaml.Visibility HeaderVisibility =>
         string.IsNullOrEmpty(Header)
@@ -20,99 +25,180 @@ public sealed record RiverRow(string Header, IReadOnlyList<RiverTile> Tiles)
 }
 
 /// <summary>
-/// Justified image rows. Original dimensions are read from headers only and only
-/// for currently requested SQLite batches. Never loads the full indexed library.
+/// Photos-style mosaic geometry: alternating justified image rows and two-tier
+/// bands with one enlarged image spanning both tiers. Geometric placement
+/// retains photo aspect ratios, avoiding forced square thumbnails.
 /// </summary>
 public static class RiverLayout
 {
+    private const double Gap = 3;
+    private const double TargetRowHeight = 192;
     private static readonly ConcurrentDictionary<string, double> Ratios =
         new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Pack an uninterrupted media stream into justified rows, independent of
-    /// month changes. The range caption is drawn once above the first row;
-    /// unlike the former month-splitting layout this avoids single-image strips.
-    /// All geometry is computed off the UI thread and never reads more than
-    /// the currently loaded SQLite batch.
-    /// </summary>
-    public static IReadOnlyList<RiverRow> Build(
-        IReadOnlyList<MediaRow> items, double width, string rangeCaption = "")
+    private sealed record Placement(int Index, double Left, double Top,
+        double Width, double Height);
+
+    private sealed record Band(int Count, double Height, double Cost,
+        IReadOnlyList<Placement> Placements);
+
+    public static IReadOnlyList<RiverRow> Build(IReadOnlyList<MediaRow> items,
+        double viewportWidth, string rangeCaption = "")
     {
         var result = new List<RiverRow>();
         if (items.Count == 0) return result;
-
-        var availableWidth = Math.Max(320, width - 18);
-        const double gap = 3;
-        const double preferredHeight = 194;
-        const double minimumHeight = 128;
-        const double maximumHeight = 275;
+        var width = Math.Max(320, viewportWidth - 16);
         var ratios = new double[items.Count];
         for (var i = 0; i < ratios.Length; i++)
             ratios[i] = GetRatio(items[i].Entry);
 
-        for (var start = 0; start < items.Count;)
+        for (var offset = 0; offset < items.Count;)
         {
-            // Select a row length whose natural height is closest to the
-            // Photos-style target without excessive cropping or dead space.
-            var max = Math.Min(10, items.Count - start);
-            var bestCount = 1;
-            var bestCost = double.PositiveInfinity;
-            var sum = 0d;
+            var regular = ChooseRegularRow(ratios, offset, width);
+            var featured = ChooseFeaturedBand(ratios, offset, width);
+            // A recurring two-tier band breaks the monotonous horizontal
+            // stripes. Defer to regular rows if a featured band would require
+            // unrealistic geometry for these specific photos.
+            var useFeatured = featured is not null &&
+                result.Count % 3 != 1 &&
+                featured.Cost < 1.85 &&
+                (regular is null || featured.Cost < regular.Cost + 1.0);
 
-            for (var count = 1; count <= max; count++)
-            {
-                sum += ratios[start + count - 1];
-                var rowWidth = availableWidth - (count - 1) * gap;
-                if (rowWidth <= 0) break;
-                var height = rowWidth / sum;
-                var cost = Math.Abs(Math.Log(height / preferredHeight));
-                if (height < minimumHeight)
-                    cost += 1.4 * (minimumHeight - height) / minimumHeight;
-                if (height > maximumHeight)
-                    cost += 1.4 * (height - maximumHeight) / maximumHeight;
-                // Avoid one giant landscape logo if more thumbnails are available.
-                if (count == 1 && max > 1) cost += 0.32;
-                if (cost < bestCost)
-                {
-                    bestCost = cost;
-                    bestCount = count;
-                }
-                if (height < minimumHeight * 0.75) break;
-            }
+            var selected = useFeatured ? featured! : regular ?? featured;
+            if (selected is null) break;
 
-            var rowSum = 0d;
-            for (var i = 0; i < bestCount; i++) rowSum += ratios[start + i];
-            var usable = availableWidth - gap * (bestCount - 1);
-            var targetHeight = usable / rowSum;
+            var tiles = selected.Placements.Select(p =>
+                new RiverTile(items[offset + p.Index],
+                    Math.Round(p.Left, 2), Math.Round(p.Top, 2),
+                    Math.Max(1, Math.Round(p.Width, 2)),
+                    Math.Max(1, Math.Round(p.Height, 2)))).ToArray();
 
-            // The last incomplete row remains left-aligned at natural tile size
-            // instead of stretching two images to absurd proportions.
-            if (start + bestCount == items.Count && targetHeight > preferredHeight * 1.15)
-                targetHeight = preferredHeight;
-
-            targetHeight = Math.Clamp(targetHeight, minimumHeight, maximumHeight);
-            var tiles = new List<RiverTile>(bestCount);
-            var remainingWidth = usable;
-            for (var i = 0; i < bestCount; i++)
-            {
-                var tileWidth = Math.Round(targetHeight * ratios[start + i]);
-                // Compensate pixel rounding on normally justified (non-final)
-                // rows so the last tile reaches the container's right edge.
-                if (i == bestCount - 1 && targetHeight == usable / rowSum)
-                    tileWidth = Math.Max(1, Math.Round(remainingWidth));
-                else
-                    tileWidth = Math.Min(tileWidth, Math.Max(1, remainingWidth));
-                remainingWidth -= tileWidth;
-
-                tiles.Add(new RiverTile(items[start + i], Math.Max(1, tileWidth),
-                    Math.Round(targetHeight)));
-            }
-
-            result.Add(new RiverRow(result.Count == 0 ? rangeCaption : "", tiles));
-            start += bestCount;
+            result.Add(new RiverRow(result.Count == 0 ? rangeCaption : "",
+                tiles, width, Math.Round(selected.Height, 2)));
+            offset += selected.Count;
         }
-
         return result;
+    }
+
+    private static Band? ChooseRegularRow(double[] ratios, int offset, double width)
+    {
+        Band? best = null;
+        double sum = 0;
+        var left = ratios.Length - offset;
+        for (var count = 1; count <= Math.Min(8, left); count++)
+        {
+            sum += ratios[offset + count - 1];
+            var space = width - (count - 1) * Gap;
+            var h = space / sum;
+            if (h < 105 || h > 370) continue;
+
+            var atEnd = offset + count == ratios.Length;
+            var displayedH = atEnd && h > TargetRowHeight * 1.12
+                ? TargetRowHeight : h;
+            var cost = Math.Abs(Math.Log(displayedH / TargetRowHeight));
+            if (count == 1 && left > 1) cost += 0.6;
+            if (displayedH > 290) cost += 0.5;
+            if (displayedH < 130) cost += 0.5;
+
+            if (best is not null && cost >= best.Cost) continue;
+            double x = 0;
+            var placements = new List<Placement>();
+            for (var j = 0; j < count; j++)
+            {
+                var w = ratios[offset + j] * displayedH;
+                if (j == count - 1 && displayedH == h)
+                    w = width - x;
+                placements.Add(new Placement(j, x, 0, Math.Max(1, w), displayedH));
+                x += w + Gap;
+            }
+            best = new Band(count, displayedH, cost, placements);
+        }
+        return best;
+    }
+
+    private static Band? ChooseFeaturedBand(double[] ratios, int offset, double width)
+    {
+        Band? best = null;
+        var remaining = ratios.Length - offset;
+        if (remaining < 3) return null;
+
+        for (var featureOnLeft = 0; featureOnLeft <= 1; featureOnLeft++)
+        for (var upperCount = 1; upperCount <= 3; upperCount++)
+        for (var lowerCount = 1; lowerCount <= 3; lowerCount++)
+        {
+            var count = 1 + upperCount + lowerCount;
+            if (count > remaining) continue;
+            var featureIndex = featureOnLeft == 1 ? 0 : count - 1;
+            var featureRatio = ratios[offset + featureIndex];
+            if (featureRatio < 0.3 || featureRatio > 1.85) continue;
+
+            var topStart = featureOnLeft == 1 ? 1 : 0;
+            var bottomStart = topStart + upperCount;
+            var sumTop = 0d;
+            var sumBottom = 0d;
+            for (var i = 0; i < upperCount; i++)
+                sumTop += ratios[offset + topStart + i];
+            for (var i = 0; i < lowerCount; i++)
+                sumBottom += ratios[offset + bottomStart + i];
+
+            var gapTop = (upperCount - 1) * Gap;
+            var gapBottom = (lowerCount - 1) * Gap;
+            var factor = 1d / sumTop + 1d / sumBottom;
+            // Solve for two row heights and a two-row feature width so that
+            // featureWidth / fullBandHeight == feature's natural aspect ratio.
+            var height = ((width - Gap - gapTop) / sumTop
+                        + (width - Gap - gapBottom) / sumBottom + Gap)
+                        / (1 + featureRatio * factor);
+            var featureWidth = featureRatio * height;
+            var restWidth = width - featureWidth - Gap;
+            var topHeight = (restWidth - gapTop) / sumTop;
+            var bottomHeight = (restWidth - gapBottom) / sumBottom;
+
+            if (!double.IsFinite(height) ||
+                height < 285 || height > 525 ||
+                featureWidth < width * 0.2 || featureWidth > width * 0.64 ||
+                topHeight < 112 || topHeight > 300 ||
+                bottomHeight < 112 || bottomHeight > 300 ||
+                Math.Abs(height - topHeight - bottomHeight - Gap) > 2)
+                continue;
+
+            var cost = 0.52 * Math.Abs(Math.Log(height / 394d))
+                     + 0.75 * Math.Abs(Math.Log(topHeight / TargetRowHeight))
+                     + 0.75 * Math.Abs(Math.Log(bottomHeight / TargetRowHeight))
+                     + 0.2 * Math.Abs(topHeight - bottomHeight) / TargetRowHeight;
+            if (best is not null && cost >= best.Cost) continue;
+
+            var result = new List<Placement>(count);
+            var rightSide = featureOnLeft == 1;
+            var remainingX = rightSide ? featureWidth + Gap : 0;
+            result.Add(new Placement(featureIndex, rightSide ? 0 : width - featureWidth,
+                0, featureWidth, height));
+
+            var x = remainingX;
+            for (var i = 0; i < upperCount; i++)
+            {
+                var w = ratios[offset + topStart + i] * topHeight;
+                if (i == upperCount - 1) w = restWidth - (x - remainingX);
+                result.Add(new Placement(topStart + i, x, 0, w, topHeight));
+                x += w + Gap;
+            }
+
+            x = remainingX;
+            for (var i = 0; i < lowerCount; i++)
+            {
+                var w = ratios[offset + bottomStart + i] * bottomHeight;
+                if (i == lowerCount - 1) w = restWidth - (x - remainingX);
+                result.Add(new Placement(bottomStart + i, x, topHeight + Gap,
+                    w, bottomHeight));
+                x += w + Gap;
+            }
+
+            // Keep the logical media/filmstrip order stable even when the
+            // featured item is positioned to the right of two smaller rows.
+            result.Sort((a, b) => a.Index.CompareTo(b.Index));
+            best = new Band(count, height, cost, result);
+        }
+        return best;
     }
 
     private static double GetRatio(MediaEntry entry)
@@ -123,15 +209,16 @@ public static class RiverLayout
         {
             try
             {
-                using var image = Image.FromFile(entry.FullPath);
-                if (image.Height > 0)
-                    return Math.Clamp((double)image.Width / image.Height, 0.55, 3.6);
+                using var img = Image.FromFile(entry.FullPath);
+                if (img.Height > 0)
+                    return Math.Clamp((double)img.Width / img.Height, 0.45, 4.0);
             }
             catch (Exception ex) when (
                 ex is IOException or UnauthorizedAccessException or ArgumentException
-                    or OutOfMemoryException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
+                    or OutOfMemoryException or NotSupportedException
+                    or System.Runtime.InteropServices.ExternalException)
             {
-                // Unavailable NAS or unsupported image: square fallback; never remove media.
+                // Offline share / unsupported decoder: display as a safe square.
             }
             return 1;
         });
