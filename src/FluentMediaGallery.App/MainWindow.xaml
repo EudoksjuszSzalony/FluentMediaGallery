@@ -6,11 +6,17 @@
     Title="FluentMediaGallery">
     <Grid x:Name="LayoutRoot" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="270"/>
+            <ColumnDefinition x:Name="SidebarColumn" Width="270" MinWidth="190" MaxWidth="560"/>
+            <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="300"/>
+            <ColumnDefinition Width="275"/>
         </Grid.ColumnDefinitions>
 
+        <Border x:Name="SidebarGrip" Grid.Column="1" Background="#35383D"
+                PointerPressed="SidebarGrip_PointerPressed"
+                PointerMoved="SidebarGrip_PointerMoved"
+                PointerReleased="SidebarGrip_PointerReleased"
+                ToolTipService.ToolTip="Przeciągnij, aby zmienić szerokość panelu"/>
         <!-- Sources are user-selected only; no automatic Pictures/SMB discovery. -->
         <Border Grid.Column="0" BorderThickness="0,0,1,0"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
@@ -40,14 +46,16 @@
                         <DataTemplate>
                             <Grid Margin="{Binding Indent}" Padding="2,2">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="34"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="26"/>
                                 </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" Content="{Binding Chevron}"
+                                <Button Grid.Column="1" Content="{Binding Chevron}"
                                         Tag="{Binding}" Click="FolderToggle_Click"
-                                        Padding="3" FontSize="15" BorderThickness="0"
+                                        Padding="2" FontSize="12" BorderThickness="0"
+                                        VerticalAlignment="Center" HorizontalAlignment="Stretch"
                                         Background="Transparent"/>
-                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center"
+                                            HorizontalAlignment="Stretch">
                                     <TextBlock Text="{Binding DisplayTitle}"
                                                TextTrimming="CharacterEllipsis" FontWeight="SemiBold"/>
                                     <TextBlock Text="{Binding Status}" FontSize="11"
@@ -87,7 +95,7 @@
         </Border>
 
         <!-- Main pane always reads a bounded SQLite page. -->
-        <Grid Grid.Column="1" Padding="20">
+        <Grid Grid.Column="2" Padding="14">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -102,19 +110,40 @@
                 <TextBlock x:Name="LibrarySummary" Text="Ładowanie biblioteki..."
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </StackPanel>
-            <Grid Grid.Row="1" Margin="0,0,0,12">
+            <Grid Grid.Row="1" Margin="0,0,0,9" ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBox x:Name="SearchBox" Grid.Column="0"
                          PlaceholderText="Szukaj po nazwie pliku i Enter"
-                         KeyDown="SearchBox_KeyDown" Margin="0,0,12,0"/>
+                         KeyDown="SearchBox_KeyDown"/>
                 <CheckBox x:Name="FavoritesOnly" Grid.Column="1" Content="Ulubione"
                           Checked="FavoritesOnly_Changed" Unchecked="FavoritesOnly_Changed"
-                          VerticalAlignment="Center" Margin="0,0,12,0"/>
-                <Button Grid.Column="2" Content="Odśwież widok" Click="Refresh_Click"/>
+                          VerticalAlignment="Center"/>
+                <ComboBox x:Name="SortBox" Grid.Column="2" MinWidth="170"
+                          SelectionChanged="SortBox_SelectionChanged"
+                          PlaceholderText="Sortowanie">
+                    <ComboBoxItem Tag="modified-desc" Content="Modyfikacja ↓"/>
+                    <ComboBoxItem Tag="modified-asc" Content="Modyfikacja ↑"/>
+                    <ComboBoxItem Tag="created-desc" Content="Utworzenie ↓"/>
+                    <ComboBoxItem Tag="created-asc" Content="Utworzenie ↑"/>
+                    <ComboBoxItem Tag="name-asc" Content="Nazwa A–Z"/>
+                    <ComboBoxItem Tag="name-desc" Content="Nazwa Z–A"/>
+                    <ComboBoxItem Tag="rating-desc" Content="Klasyfikacja 5–0★"/>
+                    <ComboBoxItem Tag="rating-asc" Content="Klasyfikacja 0–5★"/>
+                    <ComboBoxItem Tag="favorites-desc" Content="Ulubione najpierw"/>
+                    <ComboBoxItem Tag="favorites-asc" Content="Pozostałe najpierw"/>
+                </ComboBox>
+                <ComboBox x:Name="ViewModeBox" Grid.Column="3" MinWidth="120"
+                          PlaceholderText="Widok" SelectionChanged="ViewModeBox_SelectionChanged">
+                    <ComboBoxItem Tag="square" Content="Kwadrat"/>
+                    <ComboBoxItem Tag="river" Content="Rzeka (beta)"/>
+                </ComboBox>
+                <Button Grid.Column="4" Content="Odśwież" Click="Refresh_Click"/>
             </Grid>
             <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
                 <Button x:Name="ScanButton" Content="Indeksuj wybrany folder"
@@ -124,8 +153,13 @@
                 <Button x:Name="CancelButton" Content="Anuluj"
                         IsEnabled="False" Click="Cancel_Click"/>
             </StackPanel>
-            <!-- GridView uses ItemsWrapGrid virtualization; only realized tiles request thumbnails. -->
-            <GridView Grid.Row="3" x:Name="MediaItems" SelectionMode="None"
+            <!-- Both views share lazy SQLite batches; no full library materialization at startup. -->
+            <Grid Grid.Row="3" ColumnSpacing="5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="52"/>
+                </Grid.ColumnDefinitions>
+            <GridView Grid.Column="0" x:Name="MediaItems" Loaded="MediaItems_Loaded" SelectionMode="None"
                       IsItemClickEnabled="True" ItemClick="MediaItems_ItemClick"
                       ContainerContentChanging="MediaItems_ContainerContentChanging"
                       HorizontalContentAlignment="Stretch"
@@ -167,21 +201,46 @@
                     </DataTemplate>
                 </GridView.ItemTemplate>
             </GridView>
-            <Grid Grid.Row="4" Margin="0,10,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" x:Name="PageLabel" VerticalAlignment="Center"/>
-                <Button Grid.Column="1" x:Name="FirstPageButton" Content="Pierwsza"
-                        Click="FirstPage_Click" Margin="0,0,8,0"/>
-                <Button Grid.Column="2" x:Name="PreviousButton" Content="Poprzednia"
-                        Click="Previous_Click" Margin="0,0,8,0"/>
-                <Button Grid.Column="3" x:Name="NextButton" Content="Następna"
-                        Click="Next_Click"/>
+            <!-- First mosaic/Rzeka variant: wider edge-to-edge image tiles. -->
+            <GridView Grid.Column="0" x:Name="RiverItems"
+                      Visibility="Collapsed" Loaded="RiverItems_Loaded"
+                      SelectionMode="None" IsItemClickEnabled="True"
+                      ItemClick="MediaItems_ItemClick"
+                      ContainerContentChanging="MediaItems_ContainerContentChanging"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <GridView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsWrapGrid Orientation="Horizontal" ItemWidth="282" ItemHeight="181"/>
+                    </ItemsPanelTemplate>
+                </GridView.ItemsPanel>
+                <GridView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Width="278" Height="178" Background="#292C2F">
+                            <Image Source="{Binding Thumbnail}" Width="278" Height="178"
+                                   Stretch="UniformToFill"/>
+                            <TextBlock Text="{Binding Heart}" FontSize="21" Foreground="IndianRed"
+                                       HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"/>
+                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="11"
+                                       VerticalAlignment="Bottom" Padding="6,4" Foreground="White"
+                                       Background="#99000000"/>
+                        </Grid>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+            <!-- Scrubber moves by indexed offset; the displayed label depends on sort mode. -->
+            <StackPanel Grid.Column="1" Spacing="5" HorizontalAlignment="Stretch">
+                <TextBlock x:Name="TimelineHeader" Text="Data" FontSize="11"
+                           TextAlignment="Center"/>
+                <Slider x:Name="TimelineSlider" Minimum="0" Maximum="100" Value="0"
+                        Orientation="Vertical" VerticalAlignment="Stretch" Height="290"
+                        PointerReleased="TimelineSlider_PointerReleased"
+                        ValueChanged="TimelineSlider_ValueChanged"/>
+                <TextBlock x:Name="TimelineValue" Text="—" TextAlignment="Center"
+                           FontSize="10" TextWrapping="Wrap"/>
+            </StackPanel>
             </Grid>
+            <TextBlock Grid.Row="4" x:Name="PageLabel" Margin="3,7,0,0"
+                       FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             <StackPanel Grid.Row="5" Spacing="4" Margin="0,14,0,3">
                 <ProgressBar x:Name="ScanProgress" IsIndeterminate="False" Value="0" Maximum="100"/>
                 <TextBlock x:Name="OperationStatus" Text="Gotowe."
@@ -190,7 +249,7 @@
             </StackPanel>
         </Grid>
 
-        <Border Grid.Column="2" BorderThickness="1,0,0,0"
+        <Border Grid.Column="3" BorderThickness="1,0,0,0"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
             <StackPanel Padding="18" Spacing="14">
                 <TextBlock Text="Szczegóły" FontSize="19" FontWeight="SemiBold"/>
@@ -215,7 +274,7 @@
         </Border>
     
         <!-- In-window photo viewer. Nothing is loaded until a tile is opened. -->
-        <Grid x:Name="ViewerOverlay" Grid.ColumnSpan="3" Visibility="Collapsed"
+        <Grid x:Name="ViewerOverlay" Grid.ColumnSpan="4" Visibility="Collapsed"
               Background="#111315">
             <Grid.RowDefinitions>
                 <RowDefinition Height="62"/>
