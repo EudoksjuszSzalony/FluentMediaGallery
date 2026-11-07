@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="FluentMediaGallery.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="FluentMediaGallery">
+    <Grid x:Name="LayoutRoot" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="270"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="300"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Sources are user-selected only; no automatic Pictures/SMB discovery. -->
+        <Border Grid.Column="0" BorderThickness="0,0,1,0"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <Grid Padding="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel Spacing="6" Margin="0,4,0,16">
+                    <TextBlock Text="FluentMediaGallery" FontSize="21" FontWeight="SemiBold"/>
+                    <TextBlock Text="Biblioteka lokalna i sieciowa"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+                <Button Grid.Row="1" Content="Wszystkie media" HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left" Click="AllSources_Click"
+                        Margin="0,0,0,12"/>
+                <TextBlock Grid.Row="2" Text="Wybrane foldery" FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
+                <ListView Grid.Row="3" x:Name="SourceItems" IsItemClickEnabled="True"
+                          ItemClick="SourceItems_ItemClick" SelectionMode="None"
+                          HorizontalContentAlignment="Stretch">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Spacing="2" Padding="4">
+                                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding Status}" FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <StackPanel Grid.Row="4" Spacing="8" Margin="0,12,0,4">
+                    <TextBlock Text="Dodaj lokalizację" FontWeight="SemiBold"/>
+                    <TextBox x:Name="SourcePath" PlaceholderText="C:\Zdjęcia lub \\NAS\Udział\Media"
+                             TextWrapping="NoWrap"/>
+                    <Button x:Name="AddSourceButton" Content="Dodaj folder"
+                            HorizontalAlignment="Stretch" Click="AddSource_Click"/>
+                    <TextBlock Text="Dodawane są tylko wskazane foldery. Rejestracja nie uruchamia skanu."
+                               FontSize="11" TextWrapping="Wrap"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Main pane always reads a bounded SQLite page. -->
+        <Grid Grid.Column="1" Padding="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Spacing="4" Margin="0,3,0,18">
+                <TextBlock x:Name="HeaderTitle" Text="Wszystkie media" FontSize="26"
+                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="LibrarySummary" Text="Ładowanie biblioteki..."
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </StackPanel>
+            <Grid Grid.Row="1" Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="SearchBox" Grid.Column="0"
+                         PlaceholderText="Szukaj po nazwie pliku i Enter"
+                         KeyDown="SearchBox_KeyDown" Margin="0,0,12,0"/>
+                <CheckBox x:Name="FavoritesOnly" Grid.Column="1" Content="Ulubione"
+                          Checked="FavoritesOnly_Changed" Unchecked="FavoritesOnly_Changed"
+                          VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <Button Grid.Column="2" Content="Odśwież widok" Click="Refresh_Click"/>
+            </Grid>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                <Button x:Name="ScanButton" Content="Indeksuj wybrany folder"
+                        Click="Scan_Click"/>
+                <Button x:Name="RatingButton" Content="Odczytaj klasyfikacje"
+                        Click="ImportRatings_Click"/>
+                <Button x:Name="CancelButton" Content="Anuluj"
+                        IsEnabled="False" Click="Cancel_Click"/>
+            </StackPanel>
+            <ListView Grid.Row="3" x:Name="MediaItems" SelectionMode="None"
+                      IsItemClickEnabled="True" ItemClick="MediaItems_ItemClick"
+                      HorizontalContentAlignment="Stretch">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Padding="10" Margin="0,3" CornerRadius="8"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="50"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="90"/>
+                                    <ColumnDefinition Width="35"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding TypeMark}" FontSize="19"
+                                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Spacing="3">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Description}" FontSize="12"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{Binding SizeText}"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Right"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <TextBlock Grid.Column="3" Text="{Binding Heart}" FontSize="22"
+                                           Foreground="IndianRed" HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+            <Grid Grid.Row="4" Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" x:Name="PageLabel" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" x:Name="FirstPageButton" Content="Pierwsza"
+                        Click="FirstPage_Click" Margin="0,0,8,0"/>
+                <Button Grid.Column="2" x:Name="PreviousButton" Content="Poprzednia"
+                        Click="Previous_Click" Margin="0,0,8,0"/>
+                <Button Grid.Column="3" x:Name="NextButton" Content="Następna"
+                        Click="Next_Click"/>
+            </Grid>
+            <StackPanel Grid.Row="5" Spacing="4" Margin="0,14,0,3">
+                <ProgressBar x:Name="ScanProgress" IsIndeterminate="False" Value="0" Maximum="100"/>
+                <TextBlock x:Name="OperationStatus" Text="Gotowe."
+                           TextWrapping="Wrap" FontSize="12"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Column="2" BorderThickness="1,0,0,0"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <StackPanel Padding="18" Spacing="14">
+                <TextBlock Text="Szczegóły" FontSize="19" FontWeight="SemiBold"/>
+                <TextBlock x:Name="DetailsName" Text="Wybierz zdjęcie lub film" FontSize="16"
+                           TextWrapping="Wrap" FontWeight="SemiBold"/>
+                <TextBlock x:Name="DetailsPath" Text="Ścieżka pojawi się po wybraniu elementu."
+                           FontSize="12" TextWrapping="WrapWholeWords"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <TextBlock x:Name="DetailsRating" Text="Klasyfikacja: —"/>
+                <Button x:Name="FavoriteButton" Content="Dodaj do ulubionych"
+                        Click="Favorite_Click" IsEnabled="False"
+                        HorizontalAlignment="Stretch"/>
+                <TextBlock Text="Zmiana ulubionych próbuje zapisać System.Rating w pliku."
+                           FontSize="12" TextWrapping="Wrap"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <TextBlock x:Name="FavoriteStatus" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <TextBlock Text="To pierwszy interfejs indeksu. Miniaturki, pełny podgląd i odtwarzacz wideo są kolejnymi etapami."
+                           FontSize="12" TextWrapping="Wrap"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
