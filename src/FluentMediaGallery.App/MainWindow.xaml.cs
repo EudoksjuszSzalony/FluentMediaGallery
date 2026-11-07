@@ -18,6 +18,7 @@ public sealed partial class MainWindow : Window
     private readonly FavoritesService _favorites;
     private readonly ObservableCollection<SourceRow> _sources = new();
     private readonly ObservableCollection<MediaRow> _rows = new();
+    private readonly ShellThumbnailCache _thumbnailCache = new();
     private readonly DispatcherQueue _uiDispatcher;
 
     private CancellationTokenSource? _activeOperation;
@@ -196,6 +197,12 @@ public sealed partial class MainWindow : Window
         if ((_currentPage + 1L) * PageSize >= _matchedCount) return;
         _currentPage++;
         await LoadPageAsync();
+    }
+
+    private void MediaItems_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.InRecycleQueue || args.Item is not MediaRow row) return;
+        row.EnsureThumbnail(_thumbnailCache, _uiDispatcher);
     }
 
     private async void MediaItems_ItemClick(object sender, ItemClickEventArgs e)

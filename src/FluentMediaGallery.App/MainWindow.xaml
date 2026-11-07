@@ -98,41 +98,49 @@
                 <Button x:Name="CancelButton" Content="Anuluj"
                         IsEnabled="False" Click="Cancel_Click"/>
             </StackPanel>
-            <ListView Grid.Row="3" x:Name="MediaItems" SelectionMode="None"
+            <!-- GridView uses ItemsWrapGrid virtualization; only realized tiles request thumbnails. -->
+            <GridView Grid.Row="3" x:Name="MediaItems" SelectionMode="None"
                       IsItemClickEnabled="True" ItemClick="MediaItems_ItemClick"
-                      HorizontalContentAlignment="Stretch">
-                <ListView.ItemTemplate>
+                      ContainerContentChanging="MediaItems_ContainerContentChanging"
+                      HorizontalContentAlignment="Stretch"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <GridView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsWrapGrid Orientation="Horizontal" ItemWidth="184" ItemHeight="202"/>
+                    </ItemsPanelTemplate>
+                </GridView.ItemsPanel>
+                <GridView.ItemTemplate>
                     <DataTemplate>
-                        <Border Padding="10" Margin="0,3" CornerRadius="8"
+                        <Border Width="174" Height="192" Padding="5" CornerRadius="8"
                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                             <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="50"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="90"/>
-                                    <ColumnDefinition Width="35"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding TypeMark}" FontSize="19"
-                                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                <StackPanel Grid.Column="1" Spacing="3">
-                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{Binding Description}" FontSize="12"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                               TextTrimming="CharacterEllipsis"/>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="142"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <Grid Grid.Row="0" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                                    <TextBlock Text="{Binding TypeMark}" FontSize="40" Opacity="0.2"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" Width="164"
+                                           Height="142"/>
+                                    <Border Background="#AA202020" CornerRadius="4" HorizontalAlignment="Right"
+                                            VerticalAlignment="Bottom" Margin="4" Padding="5,2">
+                                        <TextBlock Text="{Binding Description}" FontSize="11" Foreground="White"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding Heart}" Foreground="IndianRed" FontSize="23"
+                                               HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"/>
+                                </Grid>
+                                <StackPanel Grid.Row="1" Spacing="2" Margin="3,5,3,0">
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                               FontWeight="SemiBold" FontSize="12"/>
+                                    <TextBlock Text="{Binding SizeText}" FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                 </StackPanel>
-                                <TextBlock Grid.Column="2" Text="{Binding SizeText}"
-                                           VerticalAlignment="Center"
-                                           HorizontalAlignment="Right"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                <TextBlock Grid.Column="3" Text="{Binding Heart}" FontSize="22"
-                                           Foreground="IndianRed" HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
                     </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                </GridView.ItemTemplate>
+            </GridView>
             <Grid Grid.Row="4" Margin="0,10,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
