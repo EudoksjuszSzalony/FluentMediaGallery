@@ -204,7 +204,7 @@ public sealed partial class ViewerWindow : Window
 
     private void ZoomScroll_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (_updatingZoom) return;
+        if (!_ready || _updatingZoom) return;
         var percent = ZoomScroll.ZoomFactor * 100;
         _updatingZoom = true;
         ZoomSlider.Value = Math.Clamp(percent, 25, 500);
