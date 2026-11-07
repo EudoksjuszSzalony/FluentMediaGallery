@@ -213,9 +213,13 @@ public sealed partial class ViewerWindow : Window
     private void RecalculateFit()
     {
         if (_imageWidth <= 0 || _imageHeight <= 0) return;
-        // Use actual viewport size AFTER window layout. No minimum 320 px guessing.
-        var w = Math.Max(1, ZoomScroll.ActualWidth - 12);
-        var h = Math.Max(1, ZoomScroll.ActualHeight - 12);
+        // If a new window hasn't completed its first layout yet, fall back to
+        // the real AppWindow dimensions instead of fitting to a 1-pixel viewport.
+        // PhotoSurface.SizeChanged will re-fit once WinUI reports the final size.
+        var w = ZoomScroll.ActualWidth > 100
+            ? ZoomScroll.ActualWidth - 12 : Math.Max(320, AppWindow.Size.Width - 130);
+        var h = ZoomScroll.ActualHeight > 100
+            ? ZoomScroll.ActualHeight - 12 : Math.Max(240, AppWindow.Size.Height - 235);
         _fitScale = Math.Min(w / _imageWidth, h / _imageHeight);
         _fitScale = Math.Clamp(_fitScale, 0.001, 10);
         FullImage.Width = Math.Max(1, _imageWidth * _fitScale);
