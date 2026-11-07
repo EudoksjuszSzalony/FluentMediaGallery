@@ -249,7 +249,8 @@
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Spacing="4" Margin="0,0,0,5">
-                            <TextBlock Text="{Binding Header}" FontWeight="SemiBold" FontSize="12"
+                            <TextBlock Text="{Binding Header}" Visibility="{Binding HeaderVisibility}"
+                                       FontWeight="SemiBold" FontSize="12"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        Margin="3,6,0,3"/>
                             <ItemsControl ItemsSource="{Binding Tiles}">

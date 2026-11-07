@@ -188,8 +188,27 @@ public sealed partial class MainWindow : Window
             : MediaItems.ActualWidth > 300 ? MediaItems.ActualWidth : 1050;
         var rows = await Task.Run(() => RiverLayout.Build(sample, width));
         if (version != _riverGeneration || _layoutKey != "river") return;
-        _riverRows.Clear();
-        foreach (var row in rows) _riverRows.Add(row);
+        // Preserve completed row visuals, thumbnails and current scroll position.
+        // Only a changed final row (or the tail after a resize) is replaced.
+        var common = 0;
+        while (common < _riverRows.Count && common < rows.Count &&
+               SameRiverRow(_riverRows[common], rows[common]))
+            common++;
+        while (_riverRows.Count > common) _riverRows.RemoveAt(_riverRows.Count - 1);
+        for (var i = common; i < rows.Count; i++) _riverRows.Add(rows[i]);
+    }
+
+    private static bool SameRiverRow(RiverRow a, RiverRow b)
+    {
+        if (a.Header != b.Header || a.Tiles.Count != b.Tiles.Count) return false;
+        for (var i = 0; i < a.Tiles.Count; i++)
+        {
+            if (a.Tiles[i].Media.Entry.Id != b.Tiles[i].Media.Entry.Id ||
+                a.Tiles[i].ImageWidth != b.Tiles[i].ImageWidth ||
+                a.Tiles[i].ImageHeight != b.Tiles[i].ImageHeight)
+                return false;
+        }
+        return true;
     }
 
     private async void RiverItems_SizeChanged(object sender, SizeChangedEventArgs e)
