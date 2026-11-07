@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
-using Windows.System;
+using VirtualKey = Windows.System.VirtualKey;
 
 namespace FluentMediaGallery.App;
 

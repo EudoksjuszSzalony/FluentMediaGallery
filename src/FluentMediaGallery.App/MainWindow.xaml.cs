@@ -22,6 +22,7 @@ public sealed partial class MainWindow : Window
     private string? _selectedFolderPath;
     private readonly ObservableCollection<MediaRow> _rows = new();
     private readonly ShellThumbnailCache _thumbnailCache = new();
+    private readonly List<ViewerWindow> _openViewers = new();
     private readonly DispatcherQueue _uiDispatcher;
 
     private CancellationTokenSource? _activeOperation;
@@ -299,7 +300,19 @@ public sealed partial class MainWindow : Window
             ? "Zapis do pliku oczekuje: " + (state.Error ?? "niezsynchronizowany")
             : "";
 
-        await OpenViewerAsync(row.Entry);
+        // Viewer captures filter, folder and sort context at the moment of opening.
+        // It owns an independent Window and can navigate without mutating the gallery UI.
+        int index = _rows.ToList().FindIndex(r => r.Entry.Id == row.Entry.Id);
+        if (index < 0) return;
+        var context = new GalleryViewContext(
+            _selectedSourceId, _selectedFolderPath,
+            FavoritesOnly.IsChecked == true, SearchBox.Text.Trim());
+        var viewer = new ViewerWindow(_database, _favorites, _thumbnailCache,
+            context, () => _ = LoadPageAsync());
+        _openViewers.Add(viewer);
+        viewer.Closed += (_, _) => _openViewers.Remove(viewer);
+        viewer.Activate();
+        await viewer.OpenAtAsync(_currentPage * (long)PageSize + index);
     }
 
     private async void Favorite_Click(object sender, RoutedEventArgs e)
