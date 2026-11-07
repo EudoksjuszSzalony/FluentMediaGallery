@@ -64,3 +64,12 @@ The new viewer top bar puts favorites, filmstrip and optional Details next to th
 - Viewer now gives ScrollViewer the complete available picture area, with previous/next controls overlaid at the sides and a separate column for on-demand Details. Fit recalculates as Details opens/closes, preserving image aspect ratio. Bottom-left bar shows dimensions in source pixels and extension (e.g. 1920 × 1080 px · JPG) rather than a filesystem path, with fallback for unsupported decoders.
 - Rzeka now packs photos continuously across date boundaries rather than forcing one often-sparse row per month, and shows a single range caption above the first row. The row packing balances aspect ratios against target row height while limiting extremely wide logos. Further tuning toward Microsoft Photos is still planned.
 - User confirmed previous build's window resizing, Details and thumbnail-frame selection. **These new commits have not been compiled or visually validated yet on Dominator.**
+
+
+## Develop UI batch: multi-height Rzeka and animated viewer (2026-11-07)
+
+The new Rzeka is no longer only an equal-height justified gallery: each virtualized band can also feature one picture spanning the combined height of two smaller rows. Tile geometry uses original media aspect ratios and limited loaded SQLite batches. This is a **new, unverified** approximation of the Windows Photos mosaic layout, informed by the general Flickr justified-layout technique; it is not a port of Microsoft's internal code.
+
+The photo viewer now places all top actions on one line, displays the filmstrip above the zoom bar, and shows original pixel dimensions, media format and file size at the lower left. Filmstrip/Details controls fade and slide briefly when toggled; navigation uses a small horizontal move without animated zoom. The gallery's left panel starts at 220 DIP, supports resize and incremental folder insertion/reposition transitions, and offers both Gallery and Favorites navigation.
+
+**Source committed only; new WinUI build and Dominator GUI verification still pending.** No Actions used for ordinary commits.

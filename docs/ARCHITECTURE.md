@@ -81,3 +81,12 @@ ViewerWindow uses a snapshot GalleryViewContext and paged database queries to na
 
 - ViewerWindow uses PhotoSurface with a star-sized photo column and a separate, initially zero-width Details pane column. Previous/next hover controls overlay the image area instead of reserving permanent side columns. A ScrollViewer SizeChanged callback re-fits after details-pane width changes; image aspect ratio is maintained. Pixel dimensions are read from Windows.Graphics.Imaging.BitmapDecoder before the width-limited preview decode, with fallback. Format comes from the file extension.
 - Justified Rzeka rows no longer reset at month boundaries. Each built row is packed by ratio (bounded 0.55–3.6) targeting around 194 DIP height, with a one-time filtered date range caption; last incomplete row remains naturally left-aligned. This builder still obtains dimensions via GDI+ header reads on currently loaded items and is not the final >200k implementation. Both changes committed but not yet built on Dominator.
+
+
+## Mosaic Rzeka, panel motion and header consolidation (2026-11-07)
+
+- Rzeka evaluates local aspect-ratio geometry for two band types: a conventional justified row and a double-tier mosaic where one feature spans both vertical tiers and remaining files fit into the two adjacent subrows. A light cost model evaluates natural heights, aspect ratios and feature width, with a recurring pattern to avoid monotonous stripes. Row components are ListView-virtualized; each contains a Canvas with an explicit band height and child Button.TranslateTransform X/Y. WinRT Setter.Value binding for Canvas.Left/Top is unsupported, so avoid it.
+- A fallback always renders any leftover single portrait image. An image still gets its actual aspect from a background GDI header read (cached only for the session), and no original media is modified.
+- Viewer TitleDragRegion coexists with all top actions in one 44 DIP row (reserved native caption buttons). Filmstrip is the row above the bottom property/zoom controls. Native DoubleAnimation+TranslateTransform panels animate opacity and slight movement; photo swap only has a short translation and does not trigger an automatic zoom transition.
+- Sidebar uses a compact 220 DIP default and diff-based ObservableCollection mutations so WinUI built-in AddDeleteThemeTransition/RepositionThemeTransition can animate folder changes without clearing all rows.
+- Development source not yet built or visually tested on main PC; revisit actual runtime behavior on Dominator.
