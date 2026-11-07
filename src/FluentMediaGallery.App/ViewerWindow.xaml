@@ -12,31 +12,40 @@
             <RowDefinition Height="44"/>
             <RowDefinition x:Name="FilmstripRow" Height="90"/>
         </Grid.RowDefinitions>
-        <Grid x:Name="TitleDragRegion" Grid.Row="0" Background="#202226" Padding="12,0,155,0">
-            <TextBlock Text="FluentMediaGallery" Foreground="#AEB6C0" FontSize="11"
-                       VerticalAlignment="Center"/>
+        <!-- Only the left region is draggable. Action buttons must remain interactive. -->
+        <Grid Grid.Row="0" Background="#202226" ColumnSpacing="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="144"/>
+            </Grid.ColumnDefinitions>
+            <Grid x:Name="TitleDragRegion" Grid.Column="0" Background="Transparent" Padding="12,0">
+                <TextBlock Text="FluentMediaGallery" Foreground="#AEB6C0"
+                           VerticalAlignment="Center" FontSize="11"/>
+            </Grid>
+            <Button Grid.Column="1" x:Name="FavoriteButton" Click="Favorite_Click"
+                    Content="♡ Ulubione (L)" IsEnabled="False" Height="27"
+                    Padding="10,1" FontSize="11"/>
+            <Button Grid.Column="2" x:Name="FilmstripButton" Click="FilmstripToggle_Click"
+                    Content="Pasek (F)" Height="27" Padding="10,1" FontSize="11"/>
+            <Button Grid.Column="3" x:Name="DetailsButton" Click="DetailsToggle_Click"
+                    Content="ⓘ Szczegóły" Height="27" Padding="10,1" FontSize="11"/>
         </Grid>
         <Grid Grid.Row="1" Background="#222428" Padding="9,2" ColumnSpacing="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Button Grid.Column="0" Content="← Galeria" Click="Close_Click"/>
-            <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+            <Button Grid.Column="0" Content="← Galeria" Click="Close_Click"
+                    Padding="8,2" FontSize="11"/>
+            <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
                 <TextBlock x:Name="FileTitle" Text="Podgląd" Foreground="White"
-                           FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                           FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                 <TextBlock x:Name="ContextTitle" Text="Wczytywanie..."
-                           Foreground="#B7BEC7" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                           Foreground="#B7BEC7" FontSize="10" TextTrimming="CharacterEllipsis"/>
             </StackPanel>
-            <Button Grid.Column="2" x:Name="FavoriteButton" Click="Favorite_Click"
-                    Content="♡ Ulubione (L)" IsEnabled="False"/>
-            <Button Grid.Column="3" x:Name="FilmstripButton" Click="FilmstripToggle_Click"
-                    Content="Ukryj pasek (F)"/>
-            <Button Grid.Column="4" Content="✕" Click="Close_Click"
-                    ToolTipService.ToolTip="Zamknij podgląd (Esc)"/>
         </Grid>
 
         <Grid Grid.Row="2" x:Name="PhotoSurface" Background="#101114"
@@ -138,8 +147,8 @@
                                 <Border Background="#32353A" CornerRadius="6"/>
                                 <Image Source="{Binding Thumbnail}" Width="84" Height="73"
                                        Stretch="UniformToFill"/>
-                                <Border Width="3" Background="#48BFFF" Opacity="{Binding SelectionOpacity}"
-                                        HorizontalAlignment="Left" VerticalAlignment="Stretch"/>
+                                <Border BorderBrush="#67BDF5" BorderThickness="2" CornerRadius="4"
+                                        Opacity="{Binding SelectionOpacity}" IsHitTestVisible="False"/>
                                 <TextBlock Text="{Binding TypeMark}" HorizontalAlignment="Right"
                                            VerticalAlignment="Bottom" Foreground="White" Margin="4"/>
                                 <TextBlock Text="{Binding Heart}" HorizontalAlignment="Right"
@@ -153,6 +162,22 @@
                         Width="32" Height="25" Padding="0" Opacity="0.5"
                         ToolTipService.ToolTip="Ukryj pasek miniaturek (F)"/>
             </Grid>
+        </Border>
+        <!-- Details only in the separate viewer; overlay never consumes gallery width. -->
+        <Border x:Name="DetailsPane" Grid.Row="2" Width="290"
+                HorizontalAlignment="Right" VerticalAlignment="Stretch"
+                Background="#F0202228" BorderBrush="#4D5057" BorderThickness="1,0,0,0"
+                Visibility="Collapsed" Padding="16">
+            <StackPanel Spacing="11">
+                <TextBlock Text="Szczegóły" FontWeight="SemiBold" FontSize="17"/>
+                <TextBlock x:Name="DetailsNameText" Text="" FontWeight="SemiBold"
+                           TextWrapping="WrapWholeWords"/>
+                <TextBlock x:Name="DetailsTypeText" Text="" FontSize="12"/>
+                <TextBlock x:Name="DetailsSizeText" Text="" FontSize="12"/>
+                <TextBlock x:Name="DetailsRatingText" Text="" FontSize="12"/>
+                <TextBlock x:Name="DetailsPathText" Text="" TextWrapping="WrapWholeWords"
+                           FontSize="11" Foreground="#B7BEC7"/>
+            </StackPanel>
         </Border>
     </Grid>
 </Window>

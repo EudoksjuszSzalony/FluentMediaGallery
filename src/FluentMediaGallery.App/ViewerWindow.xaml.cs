@@ -42,6 +42,7 @@ public sealed partial class ViewerWindow : Window
     private bool _navigating;
     private bool _writeConfirmed;
     private bool _ready;
+    private bool _detailsVisible;
     private double _imageWidth;
     private double _imageHeight;
     private double _fitScale = 1;
@@ -85,6 +86,7 @@ public sealed partial class ViewerWindow : Window
         _total = await _database.CountFilteredAsync(_context.SourceId, _context.FavoritesOnly,
             _context.Search, folderPath: _context.FolderPath);
         _offset = Math.Clamp(offset, 0, Math.Max(0, _total - 1));
+        ZoomLabel.Text = "—%";
         if (_total > 0) await ShowCurrentAsync();
         else ImageMessage.Text = "Brak plików w wybranym widoku.";
         PreviousButton.Focus(FocusState.Programmatic);
@@ -133,6 +135,13 @@ public sealed partial class ViewerWindow : Window
         FavoriteButton.IsEnabled = true;
         PreviousButton.IsEnabled = _offset > 0;
         NextButton.IsEnabled = _offset + 1 < _total;
+        DetailsNameText.Text = media.Name;
+        DetailsTypeText.Text = media.Kind == MediaKind.Video ? "Film" : "Zdjęcie";
+        DetailsSizeText.Text = $"{media.Size / 1024d / 1024d:0.##} MB";
+        DetailsRatingText.Text = media.FileRating.HasValue
+            ? $"Klasyfikacja: {Math.Clamp((media.FileRating.Value + 12) / 25, 0, 5)} ★ ({media.FileRating}/99)"
+            : "Klasyfikacja: brak / nieodczytana";
+        DetailsPathText.Text = media.FullPath;
         Status.Text = media.FullPath;
         ImageMessage.Text = "";
         FullImage.Source = null;
@@ -328,7 +337,14 @@ public sealed partial class ViewerWindow : Window
         _filmstripVisible = !_filmstripVisible;
         FilmstripBorder.Visibility = _filmstripVisible ? Visibility.Visible : Visibility.Collapsed;
         FilmstripRow.Height = new GridLength(_filmstripVisible ? 90 : 0);
-        FilmstripButton.Content = _filmstripVisible ? "Ukryj pasek (F)" : "Pokaż pasek (F)";
+        FilmstripButton.Content = _filmstripVisible ? "Pasek ✓ (F)" : "Pasek (F)";
+    }
+
+    private void DetailsToggle_Click(object sender, RoutedEventArgs e)
+    {
+        _detailsVisible = !_detailsVisible;
+        DetailsPane.Visibility = _detailsVisible ? Visibility.Visible : Visibility.Collapsed;
+        DetailsButton.Content = _detailsVisible ? "ⓘ Szczegóły ✓" : "ⓘ Szczegóły";
     }
 
     private async void Filmstrip_SelectionChanged(object sender, SelectionChangedEventArgs e)
