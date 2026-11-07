@@ -6,6 +6,18 @@ static void Check(bool condition, string reason)
     Console.WriteLine("PASS: " + reason);
 }
 
+Check(GalleryWindowPolicy.BatchSize == 100, "bounded gallery query batch remains 100");
+Check(GalleryWindowPolicy.MaxRetainedMedia == 400, "gallery keeps at most four media batches");
+Check(GalleryWindowPolicy.TrimExcess(400, 100) == 100,
+    "scroll forward evicts the oldest full media batch");
+Check(GalleryWindowPolicy.TrimExcess(300, 100) == 0,
+    "scroll forward retains batches below bound");
+Check(GalleryWindowPolicy.TrimExcess(399, 100) == 100,
+    "window pruning happens in full batches");
+Check(GalleryWindowPolicy.PreviousBatchOffset(500) == 400 &&
+      GalleryWindowPolicy.PreviousBatchOffset(0) == 0,
+    "scroll backward never requests a negative SQLite offset");
+
 Check(FavoriteRatingPolicy.IsLegacyFavorite(75), "4-star rating 75 imports as favorite");
 Check(FavoriteRatingPolicy.ToStars(75) == 4, "75 raw rating displays four stars");
 Check(FavoriteRatingPolicy.ToStars(99) == 5, "99 raw rating displays five stars");
