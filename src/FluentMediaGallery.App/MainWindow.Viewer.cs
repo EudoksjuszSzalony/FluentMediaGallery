@@ -58,10 +58,31 @@ public sealed partial class MainWindow
 
         if (entry.Kind == MediaKind.Video)
         {
-            // Movie playback is a separate stage; show the extracted preview if one exists.
-            _rows[index].EnsureThumbnail(_thumbnailCache, _uiDispatcher);
-            ViewerImage.Source = _rows[index].Thumbnail;
+            ViewerLoading.IsActive = true;
             ViewerStatus.Text = "Film — odtwarzacz wideo zostanie dodany w następnym etapie.";
+            try
+            {
+                var thumbnailPath = await _thumbnailCache.GetOrCreateAsync(entry);
+                if (thumbnailPath is not null)
+                {
+                    var thumbnailFile = await StorageFile.GetFileFromPathAsync(thumbnailPath);
+                    using var stream = await thumbnailFile.OpenReadAsync();
+                    var thumbnail = new BitmapImage();
+                    await thumbnail.SetSourceAsync(stream);
+                    if (ticket == _viewerLoadSerial && _viewerVisible)
+                        ViewerImage.Source = thumbnail;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (ticket == _viewerLoadSerial && _viewerVisible)
+                    ViewerStatus.Text = "Brak podglądu filmu: " + ex.Message;
+            }
+            finally
+            {
+                if (ticket == _viewerLoadSerial)
+                    ViewerLoading.IsActive = false;
+            }
             return;
         }
 
@@ -131,7 +152,8 @@ public sealed partial class MainWindow
     private async void ViewerFilmstrip_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_viewerVisible || _viewerSelectingFilmstrip ||
-            ViewerFilmstrip.SelectedIndex < 0) return;
+            ViewerFilmstrip.SelectedIndex < 0 ||
+            ViewerFilmstrip.SelectedIndex == _viewerIndex) return;
 
         await ShowViewerIndexAsync(ViewerFilmstrip.SelectedIndex);
     }
