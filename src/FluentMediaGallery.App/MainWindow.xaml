@@ -241,6 +241,15 @@
                       ContainerContentChanging="RiverItems_ContainerContentChanging"
                       SelectionMode="None"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="MinHeight" Value="0"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
                 <ListView.ItemsPanel>
                     <ItemsPanelTemplate>
                         <ItemsStackPanel Orientation="Vertical"/>
@@ -256,14 +265,14 @@
                             <ItemsControl ItemsSource="{Binding Tiles}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="3"/>
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Button Click="RiverTile_Click" Tag="{Binding Media}"
                                                 Width="{Binding Width}" Height="{Binding Height}"
-                                                Margin="0,0,3,0" Padding="0" BorderThickness="0"
+                                                Margin="0" Padding="0" BorderThickness="0"
                                                 Background="Transparent">
                                             <Grid Width="{Binding ImageWidth}" Height="{Binding ImageHeight}"
                                                   Background="#26292C">

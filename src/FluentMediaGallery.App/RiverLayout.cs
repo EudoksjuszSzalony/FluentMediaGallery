@@ -129,7 +129,7 @@ public static class RiverLayout
             }
             catch (Exception ex) when (
                 ex is IOException or UnauthorizedAccessException or ArgumentException
-                    or OutOfMemoryException or System.Runtime.InteropServices.ExternalException)
+                    or OutOfMemoryException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
             {
                 // Unavailable NAS or unsupported image: square fallback; never remove media.
             }
