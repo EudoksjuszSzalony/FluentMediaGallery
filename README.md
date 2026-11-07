@@ -1,49 +1,48 @@
 # FluentMediaGallery
 
-Open-source Windows 11 photo and video gallery built with WinUI 3. The goal is a fast, trustworthy alternative to Microsoft Photos for large libraries, including local drives and SMB/UNC shares.
+Open-source Windows 11 photo and video gallery planned in WinUI 3. Optimized for large libraries, multiple local directories and user-selected SMB/UNC shares.
 
-> **Status: early development (develop branch).** This repository is not yet a finished gallery or media player. Do not treat it as a release.
+> **Status: early development.** A functional Core library exists; the Windows GUI, media player, thumbnail cache and installer are not implemented yet. Do not treat this as a production release.
 
-## Goals
+## Product goals
 
-- Native Windows 11/Fluent UI with virtualized photo/video browsing.
-- Persistent SQLite index, incremental reconciliation and a bounded thumbnail cache.
-- Favorites on photos **and videos**, visible directly in the viewer.
-- Read legacy Microsoft Photos favorites via the file's Windows \`System.Rating\` property: 4 or 5 stars = favorite; 1 star = not favorite.
-- Store favorites in SQLite and write Windows `System.Rating` to supported source files (4 stars for favorite, 1 star for removed; existing 5 stars are preserved). Unwritable video or read-only files keep a pending SQLite override.
-- Multiple local, removable and SMB/UNC roots, surviving offline shares.
-- Advanced video playback, eventually including subtitles and audio-track selection.
-- Scalable performance target: initial real-world library 158,267 photos + 43,438 videos (201,705 total).
+- Fluent Windows 11-style grid, photo/video viewer, bottom filmstrip and visible favorite-heart control.
+- Favorites for photos **and videos**, read from Windows `System.Rating`: 4 or 5 stars = favorite; 1 star = not favorite.
+- User favorite changes attempt to write back 4 stars (preserving existing 5) or 1 star, with read-back verification. SQLite retains pending writes/errors for unsupported formats.
+- SQLite-backed persistent catalogue, rapid startup, virtualized paging, incremental/offline-safe reconciliation and bounded thumbnail cache.
+- User-selected local/removable/UNC-SMB roots only; never auto-import every share or Windows Photos library.
+- Video playback with seeking, subtitles, audio tracks, fullscreen (future LibVLCSharp.WinUI).
+- Scale baseline: **158,267 photos + 43,438 videos = 201,705 files**; design target ≥1 million.
+
+## Source and project guidance
+
+- [HANDOFF.md](HANDOFF.md) — **living record** of decisions, completed/untested work, bugs, test evidence and next steps; mandatory at the start of a new chat.
+- [AGENTS.md](AGENTS.md) — repository and safety rules.
+- [docs/PROJECT_CUSTOM_INSTRUCTIONS.md](docs/PROJECT_CUSTOM_INSTRUCTIONS.md) — copyable project-level ChatGPT instructions.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — roadmap and design constraints.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — Dominator workflow and cleanup policy.
+- [scripts/Cleanup-DevelopmentArtifacts.ps1](scripts/Cleanup-DevelopmentArtifacts.ps1) — **preview-first** optional cleanup of obsolete bin/obj/TestResults folders only.
 
 ## Current implementation
 
-The \`FluentMediaGallery.Core\` project implements a SQLite-backed persistent media catalogue, streaming directory scans, safe offline/error handling, database favorites overrides, and read-only Windows Shell \`System.Rating\` import. Ratings import is a separate background operation so the initial discovery isn't blocked on reading every file's metadata. A Windows-only smoke test covers scan/restart/offline/favorites semantics.
+`FluentMediaGallery.Core` targets .NET 10 Windows and contains SQLite WAL with migration, streaming folder indexing, offline safety, read/write Windows Property System `System.Rating`, favorites state with pending retries, and a Windows Core smoke test. A user-run earlier test at commit `595b5e44` passed the build and all smoke checks. The former `NU1903` dependency warning prompted an update to `Microsoft.Data.Sqlite 10.0.14`, which **still needs local retesting** on the Dominator.
 
-See [architecture](docs/ARCHITECTURE.md) and [development guidance](AGENTS.md).
+## Local build and verification
 
-## Build (Windows, .NET 10 SDK)
+On **Dominator** with .NET 10 SDK, run in **PowerShell as USER** (not administrator), from repository root:
 
-\`\`\`powershell
-dotnet restore .\src\FluentMediaGallery.Core\FluentMediaGallery.Core.csproj
-dotnet build .\src\FluentMediaGallery.Core\FluentMediaGallery.Core.csproj -c Release
-dotnet run --project .\tests\FluentMediaGallery.Core.Smoke\FluentMediaGallery.Core.Smoke.csproj -c Release
-\`\`\`
+```powershell
+& {
+    $ErrorActionPreference = 'Stop'
+    dotnet build .\src\FluentMediaGallery.Core\FluentMediaGallery.Core.csproj -c Release
+    if ($LASTEXITCODE -ne 0) { throw 'Core build failed' }
+    dotnet run --project .\tests\FluentMediaGallery.Core.Smoke\FluentMediaGallery.Core.Smoke.csproj -c Release
+    if ($LASTEXITCODE -ne 0) { throw 'Core smoke tests failed' }
+}
+```
 
-The WinUI 3 shell, thumbnail generator, background watchers and video player are future development steps. No signed installer or production release exists yet.
+GitHub Actions **do not run on routine pushes or PRs**. Reserve Actions for explicitly approved releases and assets. Any metadata-write experiments should use **copies** of real media files, never the live collection.
 
-## Actions and local verification
+## Privacy and license
 
-Push/pull CI has been removed to conserve GitHub Actions minutes. Run the smoke test locally, and reserve workflows for future release building and assets.
-
-The metadata writer depends on the Windows property handler for a file type. Some video formats are read-only and a successful Shell write cannot be assumed. An app-local override and pending-write error remain in SQLite until the media can be synchronized. Test against **copies** of representative files before enabling metadata writes on a large library.
-
-## Security and privacy
-
-Media and metadata stay on the user's computer. The database is stored under \`%LOCALAPPDATA%\FluentMediaGallery\`. Scans use local filesystem access or credentials already granted by Windows for SMB. No telemetry or cloud account is required. File-rating persistence requires write access to selected files; nonwritable media stay indexed and can still be marked as favorites in SQLite.
-
-## Development branches
-
-- \`develop\`: ongoing work, direct commits.
-- \`main\`: verified release commits.
-
-MIT license applies to this repository's code. Any embedded video decoders/codecs will need their own license notices.
+Media, SQLite index and thumbnail cache belong outside the Git repository, under `%LOCALAPPDATA%\FluentMediaGallery`. No cloud account or telemetry is required. Original file metadata is only modified by an explicit favorite toggle, if the Windows file handler permits it. MIT license applies to source; future codecs need their own license notices.
