@@ -164,6 +164,58 @@ try
 
     // A separate read-only fixture for pagination; don't change the favorites
     // or filesystem scans above. SQLite can index media without opening files.
+
+    // Reproduce an older user database WITHOUT the new width/height columns.
+    // Check the additive migration before touching any real Dominator library.
+    var legacyPath = Path.Combine(temp, "Legacy", "library.sqlite");
+    Directory.CreateDirectory(Path.GetDirectoryName(legacyPath)!);
+    await using (var legacyConnection =
+        new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + legacyPath))
+    {
+        await legacyConnection.OpenAsync();
+        using var cmd = legacyConnection.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE media (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_id INTEGER NOT NULL,
+                path TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                file_name TEXT NOT NULL,
+                kind INTEGER NOT NULL,
+                size INTEGER NOT NULL,
+                modified_ticks INTEGER NOT NULL,
+                created_ticks INTEGER NOT NULL DEFAULT 0,
+                seen_generation INTEGER NOT NULL DEFAULT 0,
+                missing INTEGER NOT NULL DEFAULT 0,
+                rating_raw INTEGER,
+                rating_checked INTEGER NOT NULL DEFAULT 0,
+                favorite_override INTEGER,
+                favorite_write_pending INTEGER NOT NULL DEFAULT 0,
+                favorite_write_error TEXT
+            );
+            INSERT INTO media(source_id,path,file_name,kind,size,modified_ticks,
+                created_ticks,missing,rating_raw,rating_checked)
+            VALUES(1,$path,'existing.jpg',1,4096,$ticks,0,0,75,1);
+            """;
+        cmd.Parameters.AddWithValue("$path", Path.Combine(temp, "Legacy", "existing.jpg"));
+        cmd.Parameters.AddWithValue("$ticks", DateTime.UtcNow.Ticks);
+        await cmd.ExecuteNonQueryAsync();
+    }
+    var legacy = new LibraryDatabase(legacyPath);
+    await legacy.InitializeAsync();
+    var previous = (await legacy.GetPageAsync(0, 100)).Single();
+    Check(previous.Name == "existing.jpg" && previous.IsFavorite &&
+          previous.FileRating == 75 && previous.PixelWidth == 0,
+        "existing SQLite library migrates without losing original favorites");
+    await legacy.CacheImageDimensionsAsync(new[]
+    {
+        new MediaDimension(previous.Id, previous.LastWriteUtcTicks,
+            previous.Size, 1200, 800)
+    });
+    await legacy.InitializeAsync();
+    Check((await legacy.GetByIdAsync(previous.Id)) is
+        { PixelWidth: 1200, PixelHeight: 800, IsFavorite: true },
+        "additive dimension migration is idempotent and preserves favorites");
+
     var pagingDb = new LibraryDatabase(Path.Combine(temp, "Paging", "library.sqlite"));
     await pagingDb.InitializeAsync();
     var pagingSource = await pagingDb.AddSourceAsync(Path.Combine(temp, "VirtualMedia"));
