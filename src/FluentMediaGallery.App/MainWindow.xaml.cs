@@ -22,6 +22,9 @@ public sealed partial class MainWindow : Window
     private readonly HashSet<string> _expandedFolders = new(StringComparer.OrdinalIgnoreCase);
     private string? _selectedFolderPath;
     private readonly ObservableCollection<MediaRow> _rows = new();
+    private readonly ObservableCollection<RiverRow> _riverRows = new();
+    private int _riverGeneration;
+    private double _lastRiverWidth;
     private readonly ShellThumbnailCache _thumbnailCache = new();
     private readonly List<ViewerWindow> _openViewers = new();
     private readonly DispatcherQueue _uiDispatcher;
@@ -54,7 +57,7 @@ public sealed partial class MainWindow : Window
 
         SourceItems.ItemsSource = _folderRows;
         MediaItems.ItemsSource = _rows;
-        RiverItems.ItemsSource = _rows;
+        RiverItems.ItemsSource = _riverRows;
         ViewerFilmstrip.ItemsSource = _rows;
         LayoutRoot.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Viewer_KeyDown), true);
         Closed += (_, _) => _activeOperation?.Cancel();
@@ -169,6 +172,41 @@ public sealed partial class MainWindow : Window
         RiverItems.Visibility = _layoutKey == "river" ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private async Task RebuildRiverAsync()
+    {
+        if (_layoutKey != "river") return;
+        var version = ++_riverGeneration;
+        var sample = _rows.ToArray();
+        var width = RiverItems.ActualWidth > 300 ? RiverItems.ActualWidth
+            : MediaItems.ActualWidth > 300 ? MediaItems.ActualWidth : 1050;
+        var rows = await Task.Run(() => RiverLayout.Build(sample, width));
+        if (version != _riverGeneration || _layoutKey != "river") return;
+        _riverRows.Clear();
+        foreach (var row in rows) _riverRows.Add(row);
+    }
+
+    private async void RiverItems_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!_isReady || _layoutKey != "river" ||
+            Math.Abs(e.NewSize.Width - _lastRiverWidth) < 24) return;
+        _lastRiverWidth = e.NewSize.Width;
+        await RebuildRiverAsync();
+    }
+
+    private void RiverItems_ContainerContentChanging(ListViewBase sender,
+        ContainerContentChangingEventArgs args)
+    {
+        if (args.InRecycleQueue || args.Item is not RiverRow row) return;
+        foreach (var tile in row.Tiles)
+            tile.Media.EnsureThumbnail(_thumbnailCache, _uiDispatcher);
+    }
+
+    private async void RiverTile_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: MediaRow row })
+            await OpenMediaAsync(row);
+    }
+
     private async Task LoadPageAsync(int? requestedOffset = null)
     {
         if (!_isReady) return;
@@ -192,7 +230,9 @@ public sealed partial class MainWindow : Window
             _rows.Clear();
             foreach (var item in items) _rows.Add(new MediaRow(item));
             UpdateGalleryProgress();
+            await RebuildRiverAsync();
             ApplyLayoutMode();
+            await RebuildRiverAsync();
         }
         catch (Exception ex)
         {
@@ -296,6 +336,7 @@ public sealed partial class MainWindow : Window
         _layoutKey = chosen.Tag?.ToString() ?? "square";
         ApplyLayoutMode();
         await _database.SetViewPreferenceAsync(CurrentViewKey(), _sortKey, _layoutKey);
+        await RebuildRiverAsync();
     }
 
     private void TimelineSlider_ValueChanged(object sender,
@@ -443,7 +484,11 @@ public sealed partial class MainWindow : Window
 
     private async void MediaItems_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is not MediaRow row) return;
+        if (e.ClickedItem is MediaRow row) await OpenMediaAsync(row);
+    }
+
+    private async Task OpenMediaAsync(MediaRow row)
+    {
         _selectedMedia = row.Entry;
         DetailsName.Text = row.Entry.Name;
         DetailsPath.Text = row.Entry.FullPath;
