@@ -583,12 +583,33 @@ public sealed partial class MainWindow : Window
         await ReloadFolderTreeAsync();
     }
 
+    private async void SidebarFavorites_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_isReady) return;
+        _selectedSourceId = null;
+        _selectedFolderPath = null;
+        _currentPage = 0;
+        UpdateHeader();
+        if (FavoritesOnly.IsChecked != true)
+        {
+            FavoritesOnly.IsChecked = true; // existing handler loads the view
+            return;
+        }
+        await LoadSavedViewAsync();
+        await LoadPageAsync();
+    }
+
     private async void AllSources_Click(object sender, RoutedEventArgs e)
     {
         _selectedSourceId = null;
         _selectedFolderPath = null;
         _currentPage = 0;
         UpdateHeader();
+        if (FavoritesOnly.IsChecked == true)
+        {
+            FavoritesOnly.IsChecked = false; // existing handler reloads the gallery
+            return;
+        }
         await LoadSavedViewAsync();
         await LoadPageAsync();
     }

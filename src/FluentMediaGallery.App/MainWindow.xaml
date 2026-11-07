@@ -48,6 +48,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -58,10 +59,14 @@
                 <Button Grid.Row="1" Content="▧  Galeria" HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Left" Click="AllSources_Click"
                         Margin="0,0,0,6" FontSize="12" Padding="9,6"/>
-                <TextBlock Grid.Row="2" Text="Wybrane foldery" FontSize="12"
+                <Button Grid.Row="2" Content="♥  Ulubione"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Click="SidebarFavorites_Click" FontSize="12"
+                        Padding="9,6" Margin="0,0,0,5"/>
+                <TextBlock Grid.Row="3" Text="Wybrane foldery" FontSize="12"
                            FontWeight="SemiBold" Margin="3,6,0,5"/>
                 <!-- Lazy, SQLite-backed folder navigation; no recursive file system access. -->
-                <ListView Grid.Row="3" x:Name="SourceItems" IsItemClickEnabled="True"
+                <ListView Grid.Row="4" x:Name="SourceItems" IsItemClickEnabled="True"
                           ItemClick="SourceItems_ItemClick" SelectionMode="None"
                           HorizontalContentAlignment="Stretch">
                     <ListView.ItemContainerTransitions>
@@ -108,7 +113,7 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
-                <StackPanel Grid.Row="4" Spacing="5" Margin="0,6,0,2">
+                <StackPanel Grid.Row="5" Spacing="5" Margin="0,6,0,2">
                     <TextBlock Text="Dodaj lokalizację" FontSize="12" FontWeight="SemiBold"/>
                     <Grid ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
