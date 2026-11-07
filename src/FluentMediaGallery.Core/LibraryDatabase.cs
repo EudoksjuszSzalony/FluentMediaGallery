@@ -201,7 +201,8 @@ public sealed class LibraryDatabase
     }
 
     public async Task<IReadOnlyList<MediaEntry>> GetPageAsync(int offset, int limit,
-        bool favoritesOnly = false, string? search = null, CancellationToken ct = default)
+        bool favoritesOnly = false, string? search = null, CancellationToken ct = default,
+        long? sourceId = null)
     {
         if (offset < 0 || limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
         var result = new List<MediaEntry>();
@@ -212,11 +213,13 @@ public sealed class LibraryDatabase
                 favorite_override,
                 COALESCE(favorite_override, CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END) AS fav
             FROM media WHERE missing=0
+                AND ($source=0 OR source_id=$source)
                 AND ($favorites=0 OR COALESCE(favorite_override,
                     CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END)=1)
                 AND ($search='' OR file_name LIKE $search ESCAPE '\')
             ORDER BY modified_ticks DESC, id DESC LIMIT $limit OFFSET $offset;
             """;
+        cmd.Parameters.AddWithValue("$source", sourceId.GetValueOrDefault());
         cmd.Parameters.AddWithValue("$favorites", favoritesOnly ? 1 : 0);
         cmd.Parameters.AddWithValue("$search", string.IsNullOrWhiteSpace(search) ? "" :
             "%" + search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%");
@@ -359,6 +362,29 @@ public sealed class LibraryDatabase
         cmd.Parameters.AddWithValue("$id", mediaId);
         cmd.Parameters.AddWithValue("$rating", rating.HasValue ? rating.Value : DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+
+    /// <summary>
+    /// Counts rows matching the same filters as GetPageAsync without loading media objects.
+    /// </summary>
+    public async Task<long> CountFilteredAsync(long? sourceId = null,
+        bool favoritesOnly = false, string? search = null, CancellationToken ct = default)
+    {
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM media
+            WHERE missing=0 AND ($source=0 OR source_id=$source)
+              AND ($favorites=0 OR COALESCE(favorite_override,
+                    CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END)=1)
+              AND ($search='' OR file_name LIKE $search ESCAPE '\');
+            """;
+        cmd.Parameters.AddWithValue("$source", sourceId.GetValueOrDefault());
+        cmd.Parameters.AddWithValue("$favorites", favoritesOnly ? 1 : 0);
+        cmd.Parameters.AddWithValue("$search", string.IsNullOrWhiteSpace(search) ? "" :
+            "%" + search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%");
+        return (long)(await cmd.ExecuteScalarAsync(ct) ?? 0L);
     }
 
     public async Task<long> CountMediaAsync(CancellationToken ct = default)

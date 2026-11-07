@@ -31,10 +31,22 @@ try
     var scan = await scanner.ScanAsync(source);
     Check(scan.Completed && scan.Discovered == 2, "initial scan stores photo and video");
     Check(await database.CountMediaAsync() == 2, "two indexed media");
+    Check(await database.CountFilteredAsync(sourceId: source.Id) == 2,
+        "source filter returns both indexed files");
+    Check(await database.CountFilteredAsync(sourceId: -999) == 0,
+        "non-existent source is empty");
+    Check((await database.GetPageAsync(0, 100, sourceId: source.Id)).Count == 2,
+        "paged source filter works");
+    Check((await database.GetPageAsync(0, 100, sourceId: -999)).Count == 0,
+        "paged source exclusion works");
+    Check(await database.CountFilteredAsync(search: "one") == 1,
+        "filtered count follows search");
     var firstPage = await database.GetPageAsync(0, 100);
     var photo = firstPage.Single(x => x.Name == "one.jpg");
     await database.SetFavoriteOverrideAsync(photo.Id, true);
     Check((await database.GetPageAsync(0, 100, favoritesOnly: true)).Count == 1, "favorite override persists");
+    Check(await database.CountFilteredAsync(favoritesOnly: true) == 1,
+        "filtered favorites count follows override");
     Check((await database.GetFavoriteWriteStateAsync(photo.Id)).Pending, "metadata write queued");
     await database.RecordFavoriteFileWriteErrorAsync(photo.Id, true, "not writable");
     Check((await database.GetFavoriteWriteStateAsync(photo.Id)).Error == "not writable",
