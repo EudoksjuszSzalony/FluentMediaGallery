@@ -70,12 +70,12 @@
                        VerticalAlignment="Bottom" HorizontalAlignment="Center"
                        Margin="20" MaxWidth="800"/>
             <Button x:Name="PreviousButton" Grid.Column="0" Content="❮" FontSize="25"
-                    Opacity="0.08" BorderThickness="0" Background="#333333"
+                    Opacity="0" BorderThickness="0" Background="#333333"
                     VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
                     PointerEntered="PreviousPointerEntered" PointerExited="PreviousPointerExited"
                     Click="Previous_Click"/>
             <Button x:Name="NextButton" Grid.Column="2" Content="❯" FontSize="25"
-                    Opacity="0.08" BorderThickness="0" Background="#333333"
+                    Opacity="0" BorderThickness="0" Background="#333333"
                     VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
                     PointerEntered="NextPointerEntered" PointerExited="NextPointerExited"
                     Click="Next_Click"/>

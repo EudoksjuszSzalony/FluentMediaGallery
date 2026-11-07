@@ -397,11 +397,11 @@ public sealed partial class ViewerWindow : Window
     private void PreviousPointerEntered(object sender, PointerRoutedEventArgs e)
         => AnimateOpacity(PreviousButton, 0.92);
     private void PreviousPointerExited(object sender, PointerRoutedEventArgs e)
-        => AnimateOpacity(PreviousButton, 0.08);
+        => AnimateOpacity(PreviousButton, 0);
     private void NextPointerEntered(object sender, PointerRoutedEventArgs e)
         => AnimateOpacity(NextButton, 0.92);
     private void NextPointerExited(object sender, PointerRoutedEventArgs e)
-        => AnimateOpacity(NextButton, 0.08);
+        => AnimateOpacity(NextButton, 0);
 
     private void CopyPath_Click(object sender, RoutedEventArgs e)
     {
