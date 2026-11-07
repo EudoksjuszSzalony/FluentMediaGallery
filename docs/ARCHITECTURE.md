@@ -90,3 +90,12 @@ ViewerWindow uses a snapshot GalleryViewContext and paged database queries to na
 - Viewer TitleDragRegion coexists with all top actions in one 44 DIP row (reserved native caption buttons). Filmstrip is the row above the bottom property/zoom controls. Native DoubleAnimation+TranslateTransform panels animate opacity and slight movement; photo swap only has a short translation and does not trigger an automatic zoom transition.
 - Sidebar uses a compact 220 DIP default and diff-based ObservableCollection mutations so WinUI built-in AddDeleteThemeTransition/RepositionThemeTransition can animate folder changes without clearing all rows.
 - Development source not yet built or visually tested on main PC; revisit actual runtime behavior on Dominator.
+
+
+## SQLite-backed dimensions and bounded gallery window (2026-11-07)
+
+- `media.pixel_width`/`pixel_height` use additive migration. `MediaEntry` returns optional cached dimensions, `MediaDimension` transactions only write unchanged indexed versions (`id,modified_ticks,size`). Index rescans reset stale sizes to zero while retaining favorites and metadata error/pending behavior.
+- Rzeka ratios use cached SQLite dimensions and a bounded session lookup; missing dimensions are read from source headers only for currently loaded image batches. Save results after laying out the first visible bands; hydrate the live MediaRow entries after successful write to suppress repeated resize writes. Videos use 16:9 fallback.
+- `GalleryWindowPolicy`: 100-row SQLite batches, hard 400 loaded-row cap. Scrolling forward prunes oldest records; scrolling backward prepends earlier records and prunes tail. Eviction cancels queued Shell thumbnail generation and releases BitmapImage references. Separate ViewerWindow offsets remain absolute.
+- `ScrollViewer.ChangeView` restores the old visible area after appending/prepending with a **heuristic pixel estimate** derived from ItemsWrapGrid cell sizes or mosaic band heights. Actual WinUI layout anchoring is not yet proven at 201k size; capture user observations before replacing this with a stronger anchor strategy.
+- No GitHub Actions, no external location enumeration, no destructive DB migration. This source stage has not yet passed actual Windows compilation/runtime validation.

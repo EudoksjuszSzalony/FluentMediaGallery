@@ -73,3 +73,12 @@ The new Rzeka is no longer only an equal-height justified gallery: each virtuali
 The photo viewer now places all top actions on one line, displays the filmstrip above the zoom bar, and shows original pixel dimensions, media format and file size at the lower left. Filmstrip/Details controls fade and slide briefly when toggled; navigation uses a small horizontal move without animated zoom. The gallery's left panel starts at 220 DIP, supports resize and incremental folder insertion/reposition transitions, and offers both Gallery and Favorites navigation.
 
 **Source committed only; new WinUI build and Dominator GUI verification still pending.** No Actions used for ordinary commits.
+
+
+## Performance stage — bounded gallery and persistent photo dimensions (2026-11-07)
+
+The current development branch introduces an **additive** SQLite migration storing source-photo pixel width/height, preserved for unchanged files and cleared after an index refresh detects a file change. The Rzeka layout first uses stored dimensions and only probes missing headers for loaded image batches, writing discovered sizes in an atomic guarded transaction. No source media files are modified.
+
+The gallery has a **two-way 100-record fetch / 400-record retained window**: it discards off-screen media rows and cancels their queued thumbnail work, enabling forward/backward scrolling without unbounded decoded image accumulation. The slider still seeks through SQLite using absolute indexes. The windowed view is not yet a globally indexed, pixel-perfect virtual scrolling engine; restoring position in variable-height Rzeka uses approximate geometry, and large-offset SQL queries can still be slow.
+
+New Core.Smoke checks cover cached dimensions and a synthetic 650-file paging sequence. **Implementation is committed but the latest changes have not yet been compiled or validated on Dominator.** Previous Dominator-confirmed Rzeka visuals remain the reference baseline.
