@@ -4,6 +4,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using VirtualKey = Windows.System.VirtualKey;
 
 namespace FluentMediaGallery.App;
@@ -29,7 +30,15 @@ public sealed partial class MainWindow : Window
     private MediaEntry? _selectedMedia;
     private long? _selectedSourceId;
     private int _currentPage;
+    private int _windowStartOffset;
     private long _matchedCount;
+    private string _sortKey = "modified-desc";
+    private string _layoutKey = "square";
+    private bool _applyingPreferences;
+    private bool _loadingMore;
+    private bool _resizingSidebar;
+    private bool _updatingTimeline;
+    private readonly HashSet<ScrollViewer> _trackedGalleryScrolls = new();
     private int _queryVersion;
     private bool _isReady;
     private bool _metadataWriteConfirmed;
@@ -45,6 +54,7 @@ public sealed partial class MainWindow : Window
 
         SourceItems.ItemsSource = _folderRows;
         MediaItems.ItemsSource = _rows;
+        RiverItems.ItemsSource = _rows;
         ViewerFilmstrip.ItemsSource = _rows;
         LayoutRoot.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Viewer_KeyDown), true);
         Closed += (_, _) => _activeOperation?.Cancel();
@@ -60,6 +70,7 @@ public sealed partial class MainWindow : Window
             await _database.InitializeAsync();
             _isReady = true;
             await ReloadSourcesAsync();
+            await LoadSavedViewAsync();
             await LoadPageAsync();
             OperationStatus.Text = "Gotowe. Dodaj folder i uruchom indeksowanie, gdy zechcesz.";
         }
@@ -125,40 +136,201 @@ public sealed partial class MainWindow : Window
         HeaderTitle.Text = selected?.Title ?? "Wszystkie media";
     }
 
-    private async Task LoadPageAsync()
+    private string CurrentViewKey()
+    {
+        if (_selectedFolderPath is not null)
+            return "folder:" + _selectedFolderPath.ToUpperInvariant();
+        if (_selectedSourceId is not null)
+            return "source:" + _selectedSourceId.Value;
+        return FavoritesOnly.IsChecked == true ? "favorites" : "all";
+    }
+
+    private async Task LoadSavedViewAsync()
+    {
+        if (!_isReady) return;
+        var pref = await _database.GetViewPreferenceAsync(CurrentViewKey());
+        _sortKey = pref.SortKey;
+        _layoutKey = pref.LayoutKey;
+        _applyingPreferences = true;
+        try
+        {
+            SortBox.SelectedItem = SortBox.Items.Cast<ComboBoxItem>()
+                .FirstOrDefault(i => i.Tag?.ToString() == _sortKey);
+            ViewModeBox.SelectedItem = ViewModeBox.Items.Cast<ComboBoxItem>()
+                .FirstOrDefault(i => i.Tag?.ToString() == _layoutKey);
+            ApplyLayoutMode();
+        }
+        finally { _applyingPreferences = false; }
+    }
+
+    private void ApplyLayoutMode()
+    {
+        MediaItems.Visibility = _layoutKey == "river" ? Visibility.Collapsed : Visibility.Visible;
+        RiverItems.Visibility = _layoutKey == "river" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async Task LoadPageAsync(int? requestedOffset = null)
     {
         if (!_isReady) return;
         var version = ++_queryVersion;
         try
         {
             var search = SearchBox.Text.Trim();
-            var favoritesOnly = FavoritesOnly.IsChecked == true;
-            var source = _selectedSourceId;
-            var folder = _selectedFolderPath;
-
-            var count = await _database.CountFilteredAsync(source, favoritesOnly, search, folderPath: folder);
-            var maxPage = count == 0 ? 0 : (int)((count - 1) / PageSize);
-            if (_currentPage > maxPage) _currentPage = maxPage;
-            var page = await _database.GetPageAsync(
-                _currentPage * PageSize, PageSize, favoritesOnly, search, sourceId: source, folderPath: folder);
+            var favorites = FavoritesOnly.IsChecked == true;
+            var count = await _database.CountFilteredAsync(_selectedSourceId, favorites, search,
+                folderPath: _selectedFolderPath);
+            var nextOffset = Math.Min(requestedOffset.GetValueOrDefault(), Math.Max(0, (int)count - 1));
+            nextOffset = Math.Max(0, (nextOffset / PageSize) * PageSize);
+            var items = await _database.GetPageAsync(nextOffset, PageSize,
+                favorites, search, sourceId: _selectedSourceId,
+                folderPath: _selectedFolderPath, sortKey: _sortKey);
             if (version != _queryVersion) return;
 
             _matchedCount = count;
+            _windowStartOffset = nextOffset;
+            _currentPage = nextOffset / PageSize;
             _rows.Clear();
-            foreach (var entry in page) _rows.Add(new MediaRow(entry));
-
-            var first = count == 0 ? 0 : _currentPage * PageSize + 1;
-            var last = Math.Min(count, (_currentPage + 1L) * PageSize);
-            PageLabel.Text = $"{first:N0}–{last:N0} z {count:N0}";
-            LibrarySummary.Text = $"{count:N0} elementów · rekordy z SQLite (100 na stronę)";
-            FirstPageButton.IsEnabled = _currentPage > 0;
-            PreviousButton.IsEnabled = _currentPage > 0;
-            NextButton.IsEnabled = (_currentPage + 1L) * PageSize < count;
+            foreach (var item in items) _rows.Add(new MediaRow(item));
+            UpdateGalleryProgress();
+            ApplyLayoutMode();
         }
         catch (Exception ex)
         {
             OperationStatus.Text = "Błąd odczytu galerii: " + ex.Message;
         }
+    }
+
+    private void UpdateGalleryProgress()
+    {
+        var from = _rows.Count == 0 ? 0 : _windowStartOffset + 1;
+        var to = _windowStartOffset + _rows.Count;
+        PageLabel.Text = $"Wczytano {from:N0}–{to:N0} z {_matchedCount:N0}. Przewiń w dół po następne.";
+        LibrarySummary.Text = $"{_matchedCount:N0} mediów • {_sortKey} • {_layoutKey} • SQLite";
+        TimelineHeader.Text = _sortKey.StartsWith("rating", StringComparison.Ordinal) ||
+                              _sortKey.StartsWith("favorites", StringComparison.Ordinal)
+            ? "★" : _sortKey.StartsWith("name", StringComparison.Ordinal) ? "A–Z" : "Data";
+        if (_rows.Count > 0)
+        {
+            var first = _rows[0].Entry;
+            TimelineValue.Text = TimelineHeader.Text == "Data"
+                ? new DateTime(first.LastWriteUtcTicks, DateTimeKind.Utc).ToLocalTime().ToString("yyyy")
+                : TimelineHeader.Text;
+        }
+        else TimelineValue.Text = "—";
+        _updatingTimeline = true;
+        try
+        {
+            TimelineSlider.Value = _matchedCount <= 1 ? 0
+                : 100d * _windowStartOffset / (_matchedCount - 1);
+        }
+        finally { _updatingTimeline = false; }
+    }
+
+    private async Task AppendMoreAsync()
+    {
+        if (_loadingMore || !_isReady) return;
+        var next = _windowStartOffset + _rows.Count;
+        if (next >= _matchedCount) return;
+
+        var version = _queryVersion;
+        _loadingMore = true;
+        try
+        {
+            var items = await _database.GetPageAsync(next, PageSize,
+                FavoritesOnly.IsChecked == true, SearchBox.Text.Trim(),
+                sourceId: _selectedSourceId, folderPath: _selectedFolderPath,
+                sortKey: _sortKey);
+            if (version != _queryVersion) return;
+            foreach (var item in items) _rows.Add(new MediaRow(item));
+            UpdateGalleryProgress();
+        }
+        catch (Exception ex) { OperationStatus.Text = "Błąd wczytywania kolejnych mediów: " + ex.Message; }
+        finally { _loadingMore = false; }
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        if (root is ScrollViewer viewer) return viewer;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var result = FindScrollViewer(VisualTreeHelper.GetChild(root, i));
+            if (result is not null) return result;
+        }
+        return null;
+    }
+
+    private void MediaItems_Loaded(object sender, RoutedEventArgs e)
+        => TrackScroll(sender as DependencyObject);
+    private void RiverItems_Loaded(object sender, RoutedEventArgs e)
+        => TrackScroll(sender as DependencyObject);
+
+    private void TrackScroll(DependencyObject? root)
+    {
+        if (root is null) return;
+        var scroll = FindScrollViewer(root);
+        if (scroll is null || !_trackedGalleryScrolls.Add(scroll)) return;
+        scroll.ViewChanged += GalleryScroll_ViewChanged;
+    }
+
+    private async void GalleryScroll_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (sender is not ScrollViewer scroll) return;
+        if (scroll.VerticalOffset + scroll.ViewportHeight >= scroll.ExtentHeight - scroll.ViewportHeight &&
+            scroll.ExtentHeight > scroll.ViewportHeight)
+            await AppendMoreAsync();
+    }
+
+    private async void SortBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isReady || _applyingPreferences ||
+            SortBox.SelectedItem is not ComboBoxItem chosen) return;
+        _sortKey = chosen.Tag?.ToString() ?? "modified-desc";
+        await _database.SetViewPreferenceAsync(CurrentViewKey(), _sortKey, _layoutKey);
+        await LoadPageAsync();
+    }
+
+    private async void ViewModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isReady || _applyingPreferences ||
+            ViewModeBox.SelectedItem is not ComboBoxItem chosen) return;
+        _layoutKey = chosen.Tag?.ToString() ?? "square";
+        ApplyLayoutMode();
+        await _database.SetViewPreferenceAsync(CurrentViewKey(), _sortKey, _layoutKey);
+    }
+
+    private void TimelineSlider_ValueChanged(object sender,
+        Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (!_isReady || _updatingTimeline) return;
+        TimelineValue.Text = TimelineHeader.Text == "★"
+            ? $"{Math.Clamp(5 - (int)Math.Round(e.NewValue / 20d), 0, 5)}★"
+            : $"{e.NewValue:0}%";
+    }
+
+    private async void TimelineSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_matchedCount < 1) return;
+        var target = (int)Math.Min(int.MaxValue, Math.Round((_matchedCount - 1) * TimelineSlider.Value / 100d));
+        await LoadPageAsync(target);
+    }
+
+    private void SidebarGrip_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _resizingSidebar = true;
+        SidebarGrip.CapturePointer(e.Pointer);
+    }
+
+    private void SidebarGrip_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_resizingSidebar) return;
+        var x = e.GetCurrentPoint(LayoutRoot).Position.X;
+        SidebarColumn.Width = new GridLength(Math.Clamp(x, 190, 560));
+    }
+
+    private void SidebarGrip_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _resizingSidebar = false;
+        SidebarGrip.ReleasePointerCapture(e.Pointer);
     }
 
     private async Task RegisterLocationAsync(string path)
@@ -169,6 +341,7 @@ public sealed partial class MainWindow : Window
         _currentPage = 0;
         SourcePath.Text = "";
         await ReloadSourcesAsync();
+        await LoadSavedViewAsync();
         await LoadPageAsync();
         OperationStatus.Text = registered.IsShortcut
             ? "Dodano skrót podfolderu bez ponownego indeksowania. Rozwiń źródło po lewej stronie."
@@ -224,6 +397,7 @@ public sealed partial class MainWindow : Window
         _selectedFolderPath = null;
         _currentPage = 0;
         UpdateHeader();
+        await LoadSavedViewAsync();
         await LoadPageAsync();
     }
 
@@ -234,6 +408,7 @@ public sealed partial class MainWindow : Window
         _selectedFolderPath = row.IsRoot ? null : row.Path;
         _currentPage = 0;
         UpdateHeader();
+        await LoadSavedViewAsync();
         await LoadPageAsync();
     }
 
@@ -256,25 +431,7 @@ public sealed partial class MainWindow : Window
     {
         if (!_isReady) return;
         _currentPage = 0;
-        await LoadPageAsync();
-    }
-
-    private async void FirstPage_Click(object sender, RoutedEventArgs e)
-    {
-        _currentPage = 0;
-        await LoadPageAsync();
-    }
-
-    private async void Previous_Click(object sender, RoutedEventArgs e)
-    {
-        _currentPage = Math.Max(0, _currentPage - 1);
-        await LoadPageAsync();
-    }
-
-    private async void Next_Click(object sender, RoutedEventArgs e)
-    {
-        if ((_currentPage + 1L) * PageSize >= _matchedCount) return;
-        _currentPage++;
+        await LoadSavedViewAsync();
         await LoadPageAsync();
     }
 
@@ -306,13 +463,13 @@ public sealed partial class MainWindow : Window
         if (index < 0) return;
         var context = new GalleryViewContext(
             _selectedSourceId, _selectedFolderPath,
-            FavoritesOnly.IsChecked == true, SearchBox.Text.Trim());
+            FavoritesOnly.IsChecked == true, SearchBox.Text.Trim(), _sortKey);
         var viewer = new ViewerWindow(_database, _favorites, _thumbnailCache,
             context, () => _ = LoadPageAsync());
         _openViewers.Add(viewer);
         viewer.Closed += (_, _) => _openViewers.Remove(viewer);
         viewer.Activate();
-        await viewer.OpenAtAsync(_currentPage * (long)PageSize + index);
+        await viewer.OpenAtAsync(_windowStartOffset + (long)index);
     }
 
     private async void Favorite_Click(object sender, RoutedEventArgs e)
