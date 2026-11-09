@@ -212,14 +212,15 @@
             <Grid Grid.Row="3" ColumnSpacing="5">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="52"/>
+                    <ColumnDefinition Width="66"/>
                 </Grid.ColumnDefinitions>
             <GridView Grid.Column="0" x:Name="MediaItems" Loaded="MediaItems_Loaded"
                       SizeChanged="MediaItems_SizeChanged" SelectionMode="None"
                       IsItemClickEnabled="True" ItemClick="MediaItems_ItemClick"
                       ContainerContentChanging="MediaItems_ContainerContentChanging"
                       HorizontalContentAlignment="Stretch"
-                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      ScrollViewer.VerticalScrollBarVisibility="Hidden">
                 <GridView.ItemsPanel>
                     <ItemsPanelTemplate>
                         <ItemsWrapGrid Orientation="Horizontal" ItemWidth="184" ItemHeight="202"/>
@@ -264,7 +265,8 @@
                       SizeChanged="RiverItems_SizeChanged"
                       ContainerContentChanging="RiverItems_ContainerContentChanging"
                       SelectionMode="None"
-                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      ScrollViewer.VerticalScrollBarVisibility="Hidden">
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="Padding" Value="0"/>
@@ -305,7 +307,7 @@
                                                 <TranslateTransform X="{Binding Left}" Y="{Binding Top}"/>
                                             </Button.RenderTransform>
                                             <Grid Width="{Binding ImageWidth}" Height="{Binding ImageHeight}"
-                                                  Background="#26292C">
+                                                  Background="#484C51">
                                                 <Image Source="{Binding Media.Thumbnail}"
                                                        Stretch="UniformToFill"/>
                                                 <TextBlock Text="{Binding Media.Heart}"
@@ -320,27 +322,28 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-            <!-- Scrubber moves by indexed offset; the displayed label depends on sort mode. -->
-            <Grid Grid.Column="1" RowSpacing="5">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                <TextBlock x:Name="TimelineHeader" Grid.Row="0" Text="Data"
-                           FontSize="11" TextAlignment="Center"/>
-                <TextBlock x:Name="TimelineTop" Grid.Row="1" Text="—"
-                           FontSize="10" TextAlignment="Center"/>
-                <Slider x:Name="TimelineSlider" Grid.Row="2" Minimum="0" Maximum="100" Value="0"
-                        Orientation="Vertical" VerticalAlignment="Stretch"
-                        PointerReleased="TimelineSlider_PointerReleased"
-                        ValueChanged="TimelineSlider_ValueChanged"/>
-                <TextBlock x:Name="TimelineBottom" Grid.Row="3" Text="—"
-                           FontSize="10" TextAlignment="Center"/>
-                <TextBlock x:Name="TimelineValue" Grid.Row="4" Text="—" TextAlignment="Center"
-                           FontSize="10" TextWrapping="Wrap"/>
+            <!-- One Photos-style date rail; the inner list's OS scrollbar is hidden.
+                 Drag/click this track for calendar seek, not for scroll position guesswork. -->
+            <Grid Grid.Column="1" x:Name="TimelineTrack" Background="Transparent"
+                  PointerPressed="TimelineTrack_PointerPressed"
+                  PointerMoved="TimelineTrack_PointerMoved"
+                  PointerReleased="TimelineTrack_PointerReleased"
+                  PointerCaptureLost="TimelineTrack_PointerCaptureLost"
+                  SizeChanged="TimelineTrack_SizeChanged"
+                  ToolTipService.ToolTip="Przeciągnij kreskę, aby przejść do daty">
+                <Canvas x:Name="TimelineMarks" IsHitTestVisible="False"/>
+                <Canvas IsHitTestVisible="False">
+                    <Border x:Name="TimelineThumb" Width="29" Height="3"
+                            CornerRadius="1.5" Background="#79D8FF"
+                            Canvas.Left="30" Canvas.Top="12"/>
+                    <Border x:Name="TimelineBubble" Background="#34383E"
+                            CornerRadius="3" Padding="4,3" Visibility="Collapsed"
+                            Canvas.Left="-37" Canvas.Top="12">
+                        <TextBlock x:Name="TimelineValue" Text="—" FontSize="10"
+                                   Foreground="White" TextAlignment="Center"
+                                   MaxWidth="85" TextWrapping="Wrap"/>
+                    </Border>
+                </Canvas>
             </Grid>
             </Grid>
             <TextBlock Grid.Row="4" x:Name="PageLabel" Margin="3,7,0,0"
