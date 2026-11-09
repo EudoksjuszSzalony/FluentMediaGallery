@@ -312,7 +312,11 @@ public sealed partial class MainWindow : Window
                         PixelWidth = d.Width, PixelHeight = d.Height
                     });
                 }
-                if (_layoutKey == "river" && !_loadingMore && !_timelineDragging)
+                // Correct geometries are stored immediately, but never move
+                // bands underneath someone actively scrolling through them.
+                var viewer = CurrentGalleryScroll();
+                if (_layoutKey == "river" && !_loadingMore && !_timelineDragging &&
+                    (viewer is null || viewer.VerticalOffset < 8))
                     await RebuildRiverAsync();
             }
             catch (OperationCanceledException) { /* User moved to another page. */ }
@@ -994,7 +998,8 @@ public sealed partial class MainWindow : Window
     {
         _timelineDragging = false;
         TimelineBubble.Visibility = Visibility.Collapsed;
-        UpdateTimelinePosition();
+        // Don't snap back to the PREVIOUS date between pointer release and
+        // completion of the asynchronous SQLite date seek.
     }
 
     private async Task SeekTimelineAsync(double fraction)
