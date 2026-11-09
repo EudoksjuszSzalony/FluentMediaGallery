@@ -388,14 +388,11 @@ public sealed partial class MainWindow : Window
             if (version != _queryVersion) return;
 
             _matchedCount = count;
-            if (TimelineHeader is not null)
-            {
-                var date = await _database.GetDateRangeAsync(_selectedSourceId, favorites,
-                    search, _selectedFolderPath, _sortKey.StartsWith("created", StringComparison.Ordinal));
-                if (version != _queryVersion) return;
-                _timelineMinTicks = date.Minimum;
-                _timelineMaxTicks = date.Maximum;
-            }
+            var date = await _database.GetDateRangeAsync(_selectedSourceId, favorites,
+                search, _selectedFolderPath, _sortKey.StartsWith("created", StringComparison.Ordinal));
+            if (version != _queryVersion) return;
+            _timelineMinTicks = date.Minimum;
+            _timelineMaxTicks = date.Maximum;
             _windowStartOffset = nextOffset;
             _currentPage = nextOffset / PageSize;
             _suppressScrollPaging = true;
@@ -963,7 +960,7 @@ public sealed partial class MainWindow : Window
     {
         if (!_resizingSidebar) return;
         var x = e.GetCurrentPoint(LayoutRoot).Position.X;
-        SidebarColumn.Width = new GridLength(Math.Clamp(x, 175, 500));
+        SidebarColumn.Width = new GridLength(Math.Clamp(x, 200, 500));
     }
 
     private void SidebarGrip_PointerReleased(object sender, PointerRoutedEventArgs e)

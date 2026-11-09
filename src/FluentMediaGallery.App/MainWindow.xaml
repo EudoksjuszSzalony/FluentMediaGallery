@@ -36,8 +36,8 @@
                 </StackPanel>
             </Grid>
             <TextBox x:Name="SearchBox" Grid.Column="1"
-                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                     Width="500" MaxWidth="500" MinWidth="140" Height="30"
+                     HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                     MaxWidth="500" MinWidth="140" Height="30"
                      FontSize="12" Margin="4,0"
                      PlaceholderText="Szukaj w bibliotece"
                      KeyDown="SearchBox_KeyDown"/>
