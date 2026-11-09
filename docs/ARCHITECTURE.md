@@ -99,3 +99,11 @@ ViewerWindow uses a snapshot GalleryViewContext and paged database queries to na
 - `GalleryWindowPolicy`: 100-row SQLite batches, hard 400 loaded-row cap. Scrolling forward prunes oldest records; scrolling backward prepends earlier records and prunes tail. Eviction cancels queued Shell thumbnail generation and releases BitmapImage references. Separate ViewerWindow offsets remain absolute.
 - `ScrollViewer.ChangeView` restores the old visible area after appending/prepending with a **heuristic pixel estimate** derived from ItemsWrapGrid cell sizes or mosaic band heights. Actual WinUI layout anchoring is not yet proven at 201k size; capture user observations before replacing this with a stronger anchor strategy.
 - No GitHub Actions, no external location enumeration, no destructive DB migration. This source stage has not yet passed actual Windows compilation/runtime validation.
+
+
+### Date scrubber, skeletons and anchored paging (2026-11-10)
+
+- The implicit vertical scrollbar of each list is hidden (wheel remains enabled). A separate WinUI Grid/Canvas date rail draws year labels and a cyan horizontal thumb; pointer capture controls selection, release maps interpolated calendar ticks to a filtered SQLite absolute offset through `GetOffsetForDateAsync`. The index lookup uses file modified or created date and selected filters.
+- Gallery seeks show a non-interactive neutral gray skeleton over existing stale content while SQL work runs. `RiverLayout.BuildWithDimensions` reads cached SQLite geometry only in the hot path and returns a fallback ratio for unknown images; background probing writes true dimensions with guarded transactions and may reflow once the viewer is near the top.
+- The bounded 400-record window now stores a visible-item scroll anchor (media ID + within-band offset) prior to mutation, then resolves it after layout, rather than relying only on guessed heights. Intermediate/restore ViewChanged notifications do not automatically fetch new pages; a new physical wheel movement or leaving the boundary re-arms paging.
+- This remains an incremental bounded-window approach. Native ItemsRepeater virtualization over all 201k index rows, precise photo-stack DOM geometry, velocity-based prefetch and robust jumps in remote slow SMB directories are not yet implemented or tested.

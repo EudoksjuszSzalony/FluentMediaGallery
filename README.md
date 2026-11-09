@@ -82,3 +82,11 @@ The current development branch introduces an **additive** SQLite migration stori
 The gallery has a **two-way 100-record fetch / 400-record retained window**: it discards off-screen media rows and cancels their queued thumbnail work, enabling forward/backward scrolling without unbounded decoded image accumulation. The slider still seeks through SQLite using absolute indexes. The windowed view is not yet a globally indexed, pixel-perfect virtual scrolling engine; restoring position in variable-height Rzeka uses approximate geometry, and large-offset SQL queries can still be slow.
 
 New Core.Smoke checks cover cached dimensions and a synthetic 650-file paging sequence. **Implementation is committed but the latest changes have not yet been compiled or validated on Dominator.** Previous Dominator-confirmed Rzeka visuals remain the reference baseline.
+
+
+### 2026-11-10 — Calendar rail and non-blocking image placeholders (develop, unverified on Dominator)
+
+- Gallery's duplicate right-hand vertical scrollbar/date Slider is replaced with a single Photos-inspired timeline track: year labels and draggable short horizontal cyan marker. Date jumps are resolved by a filtered SQLite count, respecting created/modified date sort directions; mouse wheel scrolling still works with the native bar hidden.
+- The image grid displays gray placeholder cells immediately for distant seeks; missing source dimensions are probed asynchronously rather than blocking first render. Mosaic rearrangement during a scroll is guarded. Forward/reverse bounded paging now attempts to preserve a visible media anchor by ID and ignores intermediate scrollbar events to avoid oscillating on window pruning.
+- Top chrome is closer to the Photos reference: 40-DIP titlebar, centered search, compact controls, 250-DIP resizable sidebar and smaller header typography.
+- No changes to favorites semantics or indexed source selection. No new dependencies or routine GitHub Actions. **Latest GUI has NOT yet been built or checked on Dominator**; all new behaviors need on-machine verification.
