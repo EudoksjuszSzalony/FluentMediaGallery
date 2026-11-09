@@ -55,6 +55,8 @@ public sealed partial class MainWindow : Window
     private long _timelineMinTicks;
     private long _timelineMaxTicks;
     private readonly HashSet<ScrollViewer> _trackedGalleryScrolls = new();
+    private ScrollViewer? _squareScroll;
+    private ScrollViewer? _riverScroll;
     private int _queryVersion;
     private bool _isReady;
     private bool _metadataWriteConfirmed;
@@ -382,8 +384,13 @@ public sealed partial class MainWindow : Window
         {
             var search = SearchBox.Text.Trim();
             var favorites = FavoritesOnly.IsChecked == true;
-            var count = await _database.CountFilteredAsync(_selectedSourceId, favorites, search,
-                folderPath: _selectedFolderPath);
+            // An explicit seek uses the count and date bounds already fetched
+            // for this same filter. Avoid re-running full-library COUNT/MIN/MAX
+            // before retrieving a distant 100-row SQLite page.
+            var count = requestedOffset.HasValue
+                ? _matchedCount
+                : await _database.CountFilteredAsync(_selectedSourceId, favorites, search,
+                    folderPath: _selectedFolderPath);
             var nextOffset = Math.Min(requestedOffset.GetValueOrDefault(), Math.Max(0, (int)count - 1));
             nextOffset = Math.Max(0, (nextOffset / PageSize) * PageSize);
             var items = await _database.GetPageAsync(nextOffset, PageSize,
@@ -392,11 +399,14 @@ public sealed partial class MainWindow : Window
             if (version != _queryVersion) return;
 
             _matchedCount = count;
-            var date = await _database.GetDateRangeAsync(_selectedSourceId, favorites,
-                search, _selectedFolderPath, _sortKey.StartsWith("created", StringComparison.Ordinal));
-            if (version != _queryVersion) return;
-            _timelineMinTicks = date.Minimum;
-            _timelineMaxTicks = date.Maximum;
+            if (!requestedOffset.HasValue)
+            {
+                var date = await _database.GetDateRangeAsync(_selectedSourceId, favorites,
+                    search, _selectedFolderPath, _sortKey.StartsWith("created", StringComparison.Ordinal));
+                if (version != _queryVersion) return;
+                _timelineMinTicks = date.Minimum;
+                _timelineMaxTicks = date.Maximum;
+            }
             _windowStartOffset = nextOffset;
             _currentPage = nextOffset / PageSize;
             _suppressScrollPaging = true;
@@ -595,7 +605,7 @@ public sealed partial class MainWindow : Window
     }
 
     private ScrollViewer? CurrentGalleryScroll()
-        => FindScrollViewer(_layoutKey == "river" ? RiverItems : MediaItems);
+        => _layoutKey == "river" ? _riverScroll : _squareScroll;
 
     private void ResetGalleryScroll()
     {
@@ -861,8 +871,11 @@ public sealed partial class MainWindow : Window
     {
         if (root is null) return;
         var scroll = FindScrollViewer(root);
-        if (scroll is null || !_trackedGalleryScrolls.Add(scroll)) return;
-        scroll.ViewChanged += GalleryScroll_ViewChanged;
+        if (scroll is null) return;
+        if (ReferenceEquals(root, MediaItems)) _squareScroll = scroll;
+        if (ReferenceEquals(root, RiverItems)) _riverScroll = scroll;
+        if (_trackedGalleryScrolls.Add(scroll))
+            scroll.ViewChanged += GalleryScroll_ViewChanged;
     }
 
     private async void GalleryScroll_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
