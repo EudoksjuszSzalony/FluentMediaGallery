@@ -756,6 +756,8 @@ public sealed partial class MainWindow : Window
     private void MediaItems_Loaded(object sender, RoutedEventArgs e)
     {
         TrackScroll(sender as DependencyObject);
+        MediaItems.AddHandler(UIElement.PointerWheelChangedEvent,
+            new PointerEventHandler(GalleryWheel_PointerWheelChanged), true);
         UpdateSquareTileWidth(MediaItems.ActualWidth);
     }
 
@@ -770,7 +772,20 @@ public sealed partial class MainWindow : Window
         grid.ItemWidth = Math.Floor(available / count);
     }
     private void RiverItems_Loaded(object sender, RoutedEventArgs e)
-        => TrackScroll(sender as DependencyObject);
+    {
+        TrackScroll(sender as DependencyObject);
+        RiverItems.AddHandler(UIElement.PointerWheelChangedEvent,
+            new PointerEventHandler(GalleryWheel_PointerWheelChanged), true);
+    }
+
+    private void GalleryWheel_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        // A physical wheel gesture is the user's explicit request to fetch
+        // another batch. Programmatic ChangeView events never rearm paging,
+        // so they cannot create the top/middle oscillation seen on Dominator.
+        if (!_loadingMore && !_timelineDragging && !_suppressScrollPaging)
+            _pagingBoundaryArmed = true;
+    }
 
     private void TrackScroll(DependencyObject? root)
     {
