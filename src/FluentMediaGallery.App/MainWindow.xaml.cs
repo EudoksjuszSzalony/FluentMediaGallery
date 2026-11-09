@@ -50,6 +50,7 @@ public sealed partial class MainWindow : Window
     private int _timelineSeekVersion;
     private bool _pagingBoundaryArmed = true;
     private bool _lastPageWasBackward;
+    private CancellationTokenSource? _dimensionProbeCancellation;
 
     private long _timelineMinTicks;
     private long _timelineMaxTicks;
@@ -78,7 +79,11 @@ public sealed partial class MainWindow : Window
         RiverItems.ItemsSource = _riverRows;
         ViewerFilmstrip.ItemsSource = _rows;
         LayoutRoot.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Viewer_KeyDown), true);
-        Closed += (_, _) => _activeOperation?.Cancel();
+        Closed += (_, _) =>
+        {
+            _activeOperation?.Cancel();
+            _dimensionProbeCancellation?.Cancel();
+        };
 
         // Startup uses only persisted SQLite. Never enumerate folders implicitly.
         _ = InitializeAsync();
@@ -271,6 +276,54 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void ScheduleDimensionProbe()
+    {
+        _dimensionProbeCancellation?.Cancel();
+        _dimensionProbeCancellation = new CancellationTokenSource();
+        var token = _dimensionProbeCancellation.Token;
+        var generation = _queryVersion;
+        var visible = _rows.Where(row => row.Entry.Kind == MediaKind.Photo &&
+            (row.Entry.PixelWidth <= 0 || row.Entry.PixelHeight <= 0)).ToArray();
+        if (visible.Length == 0) return;
+
+        // Do not await this work from painting, scrolling, or timeline handlers.
+        // Offline SMB reads may take seconds; gray placeholders remain responsive.
+        _ = ProbeAsync();
+        async Task ProbeAsync()
+        {
+            try
+            {
+                var found = await Task.Run(() =>
+                    RiverLayout.ProbeMissingDimensions(visible, token), token);
+                token.ThrowIfCancellationRequested();
+                if (found.Count == 0 || generation != _queryVersion) return;
+                await _database.CacheImageDimensionsAsync(found, token);
+                token.ThrowIfCancellationRequested();
+                if (generation != _queryVersion) return;
+
+                var measured = found.ToDictionary(d => d.Id);
+                foreach (var row in _rows)
+                {
+                    if (!measured.TryGetValue(row.Entry.Id, out var d) ||
+                        row.Entry.LastWriteUtcTicks != d.ModifiedUtcTicks ||
+                        row.Entry.Size != d.Size) continue;
+                    row.UpdateEntry(row.Entry with
+                    {
+                        PixelWidth = d.Width, PixelHeight = d.Height
+                    });
+                }
+                if (_layoutKey == "river" && !_loadingMore && !_timelineDragging)
+                    await RebuildRiverAsync();
+            }
+            catch (OperationCanceledException) { /* User moved to another page. */ }
+            catch (Exception ex)
+            {
+                if (generation == _queryVersion)
+                    OperationStatus.Text = "Wymiary miniatur: " + ex.Message;
+            }
+        }
+    }
+
     private static bool SameRiverRow(RiverRow a, RiverRow b)
     {
         if (a.Header != b.Header || a.Tiles.Count != b.Tiles.Count ||
@@ -317,6 +370,10 @@ public sealed partial class MainWindow : Window
     {
         if (!_isReady) return;
         var version = ++_queryVersion;
+        _dimensionProbeCancellation?.Cancel();
+        _pagingBoundaryArmed = false;
+        if (requestedOffset.HasValue)
+            GalleryLoadingOverlay.Visibility = Visibility.Visible;
         try
         {
             var search = SearchBox.Text.Trim();
@@ -348,13 +405,17 @@ public sealed partial class MainWindow : Window
             UpdateGalleryProgress();
             ApplyLayoutMode();
             await RebuildRiverAsync();
+            if (version != _queryVersion) return;
+            GalleryLoadingOverlay.Visibility = Visibility.Collapsed;
             ResetGalleryScroll();
+            ScheduleDimensionProbe();
         }
         catch (Exception ex)
         {
             if (version == _queryVersion)
             {
                 _suppressScrollPaging = false;
+                GalleryLoadingOverlay.Visibility = Visibility.Collapsed;
                 OperationStatus.Text = "Błąd odczytu galerii: " + ex.Message;
             }
         }
@@ -626,6 +687,7 @@ public sealed partial class MainWindow : Window
             await RebuildRiverAsync();
             if (version != _queryVersion) return;
             UpdateGalleryProgress();
+            ScheduleDimensionProbe();
             if (prune > 0)
                 RestoreGalleryScroll(oldOffset - removedHeight, version);
         }
@@ -673,6 +735,7 @@ public sealed partial class MainWindow : Window
             if (version != _queryVersion) return;
             var insertedHeight = ApproximateTopHeight(items.Count);
             UpdateGalleryProgress();
+            ScheduleDimensionProbe();
             RestoreGalleryScroll(oldOffset + insertedHeight, version);
         }
         catch (Exception ex)
@@ -722,14 +785,31 @@ public sealed partial class MainWindow : Window
 
     private async void GalleryScroll_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (sender is not ScrollViewer scroll || _loadingMore || _suppressScrollPaging)
+        if (sender is not ScrollViewer scroll || _loadingMore ||
+            _suppressScrollPaging || _timelineDragging) return;
+
+        UpdateTimelinePosition();
+
+        // Intermediate notifications fire repeatedly while a user drags a
+        // thumb. Reacting to them while replacing mosaic bands previously
+        // caused the scrollbar to bounce between the top and the middle.
+        if (e.IsIntermediate) return;
+
+        var nearTop = scroll.VerticalOffset < Math.Min(130, scroll.ViewportHeight * 0.25);
+        var nearBottom = scroll.VerticalOffset + scroll.ViewportHeight >=
+            scroll.ExtentHeight - scroll.ViewportHeight * 0.8 &&
+            scroll.ExtentHeight > scroll.ViewportHeight;
+
+        if (!nearTop && !nearBottom)
+        {
+            _pagingBoundaryArmed = true;
             return;
-        if (scroll.VerticalOffset < Math.Min(130, scroll.ViewportHeight * 0.25) &&
-            _windowStartOffset > 0)
+        }
+        if (!_pagingBoundaryArmed) return;
+        _pagingBoundaryArmed = false;
+        if (nearTop && _windowStartOffset > 0)
             await PrependEarlierAsync();
-        else if (scroll.VerticalOffset + scroll.ViewportHeight >=
-                 scroll.ExtentHeight - scroll.ViewportHeight * 0.8 &&
-                 scroll.ExtentHeight > scroll.ViewportHeight)
+        else if (nearBottom)
             await AppendMoreAsync();
     }
 
@@ -845,6 +925,7 @@ public sealed partial class MainWindow : Window
         var ticket = ++_timelineSeekVersion;
         _suppressScrollPaging = true;
         _pagingBoundaryArmed = false;
+        GalleryLoadingOverlay.Visibility = Visibility.Visible;
         try
         {
             long target;
@@ -867,6 +948,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             OperationStatus.Text = "Błąd przejścia do daty: " + ex.Message;
+            GalleryLoadingOverlay.Visibility = Visibility.Collapsed;
             _suppressScrollPaging = false;
         }
     }
