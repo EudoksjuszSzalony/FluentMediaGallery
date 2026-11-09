@@ -351,6 +351,8 @@
                     <RowDefinition Height="178"/>
                     <RowDefinition Height="178"/>
                     <RowDefinition Height="178"/>
+                    <RowDefinition Height="178"/>
+                    <RowDefinition Height="178"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
@@ -371,6 +373,14 @@
                 <Border Grid.Row="2" Grid.Column="1" Background="#393E43" Margin="2" CornerRadius="4"/>
                 <Border Grid.Row="2" Grid.Column="2" Background="#454A4E" Margin="2" CornerRadius="4"/>
                 <Border Grid.Row="2" Grid.Column="3" Background="#393E43" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="3" Grid.Column="0" Background="#393E43" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="3" Grid.Column="1" Background="#454A4E" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="3" Grid.Column="2" Background="#393E43" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="3" Grid.Column="3" Background="#454A4E" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="4" Grid.Column="0" Background="#454A4E" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="4" Grid.Column="1" Background="#393E43" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="4" Grid.Column="2" Background="#454A4E" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="4" Grid.Column="3" Background="#393E43" Margin="2" CornerRadius="4"/>
             </Grid>
             <!-- One Photos-style date rail; the inner list's OS scrollbar is hidden.
                  Drag/click this track for calendar seek, not for scroll position guesswork. -->
