@@ -5,6 +5,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
+using Microsoft.UI;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using VirtualKey = Windows.System.VirtualKey;
 
 namespace FluentMediaGallery.App;
@@ -42,6 +45,12 @@ public sealed partial class MainWindow : Window
     private bool _suppressScrollPaging;
     private bool _resizingSidebar;
     private bool _updatingTimeline;
+    private bool _timelineDragging;
+    private double _timelineDragFraction;
+    private int _timelineSeekVersion;
+    private bool _pagingBoundaryArmed = true;
+    private bool _lastPageWasBackward;
+
     private long _timelineMinTicks;
     private long _timelineMaxTicks;
     private readonly HashSet<ScrollViewer> _trackedGalleryScrolls = new();
@@ -358,42 +367,169 @@ public sealed partial class MainWindow : Window
         PageLabel.Text = $"W pamięci {from:N0}–{to:N0} z {_matchedCount:N0} " +
             $"(maks. {GalleryWindowPolicy.MaxRetainedMedia}). Przewijaj w obu kierunkach.";
         LibrarySummary.Text = $"{_matchedCount:N0} mediów • {_sortKey} • {_layoutKey} • SQLite";
-        TimelineHeader.Text = _sortKey.StartsWith("rating", StringComparison.Ordinal) ||
-                              _sortKey.StartsWith("favorites", StringComparison.Ordinal)
-            ? "★" : _sortKey.StartsWith("name", StringComparison.Ordinal) ? "A–Z" : "Data";
-        var ascending = _sortKey.EndsWith("-asc", StringComparison.Ordinal);
-        if (TimelineHeader.Text == "Data" && _timelineMaxTicks > 0)
+        RenderTimelineMarkers();
+        if (!_timelineDragging) UpdateTimelinePosition();
+    }
+
+    private bool TimelineUsesDate =>
+        _sortKey.StartsWith("modified", StringComparison.Ordinal) ||
+        _sortKey.StartsWith("created", StringComparison.Ordinal);
+
+    private double DateFraction(long ticks)
+    {
+        if (_timelineMaxTicks <= _timelineMinTicks) return 0;
+        var ratio = Math.Clamp((ticks - (double)_timelineMinTicks) /
+            (_timelineMaxTicks - (double)_timelineMinTicks), 0, 1);
+        return _sortKey.EndsWith("-asc", StringComparison.Ordinal) ? ratio : 1 - ratio;
+    }
+
+    private long DateForFraction(double fraction)
+    {
+        var ratio = _sortKey.EndsWith("-asc", StringComparison.Ordinal)
+            ? fraction : 1 - fraction;
+        return _timelineMinTicks + (long)((_timelineMaxTicks - _timelineMinTicks) *
+            Math.Clamp(ratio, 0d, 1d));
+    }
+
+    private string TimelineLabel(double fraction)
+    {
+        if (TimelineUsesDate && _timelineMaxTicks > _timelineMinTicks)
         {
-            TimelineTop.Text = new DateTime(ascending ? _timelineMinTicks : _timelineMaxTicks,
-                DateTimeKind.Utc).ToLocalTime().ToString("yyyy");
-            TimelineBottom.Text = new DateTime(ascending ? _timelineMaxTicks : _timelineMinTicks,
-                DateTimeKind.Utc).ToLocalTime().ToString("yyyy");
+            var ticks = Math.Clamp(DateForFraction(fraction), DateTime.MinValue.Ticks,
+                DateTime.MaxValue.Ticks);
+            return new DateTime(ticks, DateTimeKind.Utc).ToLocalTime()
+                .ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("pl-PL"));
         }
-        else if (TimelineHeader.Text == "★")
+        if (_sortKey.StartsWith("rating", StringComparison.Ordinal))
         {
-            TimelineTop.Text = _sortKey.StartsWith("favorites", StringComparison.Ordinal)
-                ? (ascending ? "—" : "♥") : (ascending ? "0★" : "5★");
-            TimelineBottom.Text = _sortKey.StartsWith("favorites", StringComparison.Ordinal)
-                ? (ascending ? "♥" : "—") : (ascending ? "5★" : "0★");
+            var stars = Math.Clamp((int)Math.Round(fraction * 5), 0, 5);
+            return (_sortKey.EndsWith("-asc", StringComparison.Ordinal) ? stars : 5 - stars) + "★";
+        }
+        if (_sortKey.StartsWith("favorites", StringComparison.Ordinal))
+            return fraction >= 0.5 ? "—" : "♥";
+        return fraction >= 0.5 ? "A–Z" : "Z–A";
+    }
+
+    private void UpdateTimelinePosition()
+    {
+        if (_timelineDragging || !_isReady) return;
+        var fraction = 0d;
+        if (_rows.Count > 0)
+        {
+            var itemIndex = EstimateVisibleMediaIndex();
+            var visibleIndex = Math.Clamp(itemIndex, 0, _rows.Count - 1);
+            if (TimelineUsesDate && _timelineMaxTicks > _timelineMinTicks)
+            {
+                var entry = _rows[visibleIndex].Entry;
+                var ticks = _sortKey.StartsWith("created", StringComparison.Ordinal)
+                    && entry.CreatedUtcTicks > 0 ? entry.CreatedUtcTicks
+                    : entry.LastWriteUtcTicks;
+                fraction = DateFraction(ticks);
+            }
+            else if (_matchedCount > 1)
+                fraction = Math.Clamp((_windowStartOffset + (double)visibleIndex) /
+                    (_matchedCount - 1), 0, 1);
+        }
+        MoveTimelineThumb(fraction);
+    }
+
+    private int EstimateVisibleMediaIndex()
+    {
+        var scroll = CurrentGalleryScroll();
+        if (scroll is null) return 0;
+        var pixels = Math.Max(0, scroll.VerticalOffset);
+        if (_layoutKey != "river")
+        {
+            var wrap = MediaItems.ItemsPanelRoot as ItemsWrapGrid;
+            var width = wrap?.ItemWidth > 0 ? wrap.ItemWidth : 184d;
+            var columns = Math.Max(1, (int)Math.Floor(
+                Math.Max(width, MediaItems.ActualWidth - 16) / width));
+            var height = wrap?.ItemHeight > 0 ? wrap.ItemHeight : 202d;
+            return Math.Min(_rows.Count - 1,
+                (int)(pixels / height) * columns);
+        }
+        var index = 0;
+        foreach (var band in _riverRows)
+        {
+            var h = band.CanvasHeight + 4 +
+                (string.IsNullOrWhiteSpace(band.Header) ? 0 : 26);
+            if (pixels < h) break;
+            pixels -= h;
+            index += band.Tiles.Count;
+        }
+        return Math.Clamp(index, 0, Math.Max(0, _rows.Count - 1));
+    }
+
+    private void MoveTimelineThumb(double fraction)
+    {
+        fraction = Math.Clamp(fraction, 0, 1);
+        var height = Math.Max(1d, TimelineTrack.ActualHeight - 24);
+        var y = 12 + height * fraction;
+        Canvas.SetTop(TimelineThumb, y);
+        Canvas.SetTop(TimelineBubble, Math.Clamp(y - 14, 0,
+            Math.Max(0, TimelineTrack.ActualHeight - 30)));
+        TimelineValue.Text = TimelineLabel(fraction);
+    }
+
+    private void RenderTimelineMarkers()
+    {
+        if (TimelineTrack.ActualHeight < 80) return;
+        TimelineMarks.Children.Clear();
+        void Mark(double fraction, string label, bool big)
+        {
+            var top = 12 + Math.Clamp(fraction, 0, 1) *
+                Math.Max(1d, TimelineTrack.ActualHeight - 24);
+            var dash = new Border
+            {
+                Width = big ? 9 : 4,
+                Height = big ? 2 : 1,
+                Background = new SolidColorBrush(ColorHelper.FromArgb(
+                    255, big ? (byte)156 : (byte)105,
+                    big ? (byte)161 : (byte)110,
+                    big ? (byte)167 : (byte)116)),
+                CornerRadius = new CornerRadius(1)
+            };
+            Canvas.SetLeft(dash, 39);
+            Canvas.SetTop(dash, top);
+            TimelineMarks.Children.Add(dash);
+            if (!big) return;
+            var text = new TextBlock
+            {
+                Text = label, FontSize = 10,
+                Foreground = new SolidColorBrush(Colors.LightGray),
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(text, 18);
+            Canvas.SetTop(text, Math.Clamp(top - 17, 0,
+                Math.Max(0, TimelineTrack.ActualHeight - 20)));
+            TimelineMarks.Children.Add(text);
+        }
+
+        if (TimelineUsesDate && _timelineMaxTicks > _timelineMinTicks)
+        {
+            var firstYear = new DateTime(_timelineMinTicks, DateTimeKind.Utc).Year;
+            var lastYear = new DateTime(_timelineMaxTicks, DateTimeKind.Utc).Year;
+            var years = Math.Clamp(lastYear - firstYear + 1, 1, 150);
+            var step = Math.Max(1, (int)Math.Ceiling(years * 35d /
+                Math.Max(1, TimelineTrack.ActualHeight - 24)));
+            for (var year = firstYear; year <= lastYear; year++)
+            {
+                var ticks = new DateTime(year, 1, 1, 0, 0, 0,
+                    DateTimeKind.Utc).Ticks;
+                var isMajor = year == firstYear || year == lastYear ||
+                    (year - firstYear) % step == 0;
+                Mark(DateFraction(ticks), year.ToString(), isMajor);
+            }
         }
         else
         {
-            TimelineTop.Text = ascending ? "A" : "Z";
-            TimelineBottom.Text = ascending ? "Z" : "A";
+            for (var i = 0; i <= 5; i++)
+                Mark(i / 5d, _sortKey.StartsWith("rating", StringComparison.Ordinal)
+                    ? (_sortKey.EndsWith("-asc", StringComparison.Ordinal)
+                        ? i : 5 - i) + "★"
+                    : i == 0 ? "A" : i == 5 ? "Z" : "", i == 0 || i == 5 ||
+                        _sortKey.StartsWith("rating", StringComparison.Ordinal));
         }
-        TimelineValue.Text = TimelineHeader.Text == "Data" && _rows.Count > 0
-            ? new DateTime((_sortKey.StartsWith("created", StringComparison.Ordinal) &&
-                _rows[0].Entry.CreatedUtcTicks > 0) ? _rows[0].Entry.CreatedUtcTicks :
-                _rows[0].Entry.LastWriteUtcTicks, DateTimeKind.Utc)
-                .ToLocalTime().ToString("MMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("pl-PL"))
-            : TimelineHeader.Text;
-        _updatingTimeline = true;
-        try
-        {
-            TimelineSlider.Value = _matchedCount <= 1 ? 0
-                : 100d * _windowStartOffset / (_matchedCount - 1);
-        }
-        finally { _updatingTimeline = false; }
     }
 
     private ScrollViewer? CurrentGalleryScroll()
@@ -652,34 +788,87 @@ public sealed partial class MainWindow : Window
         await RebuildRiverAsync();
     }
 
-    private void TimelineSlider_ValueChanged(object sender,
-        Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    private double TimelineFractionFromPointer(PointerRoutedEventArgs e)
     {
-        if (!_isReady || _updatingTimeline) return;
-        if (TimelineHeader.Text == "★")
-        {
-            var ascending = _sortKey.EndsWith("-asc", StringComparison.Ordinal);
-            var stars = Math.Clamp((int)Math.Round(e.NewValue / 20d), 0, 5);
-            TimelineValue.Text = $"{(ascending ? stars : 5 - stars)}★";
-        }
-        else if (TimelineHeader.Text == "Data" && _timelineMaxTicks > _timelineMinTicks)
-        {
-            var fraction = e.NewValue / 100d;
-            var ticks = _sortKey.EndsWith("-asc", StringComparison.Ordinal)
-                ? _timelineMinTicks + (long)((_timelineMaxTicks - _timelineMinTicks) * fraction)
-                : _timelineMaxTicks - (long)((_timelineMaxTicks - _timelineMinTicks) * fraction);
-            TimelineValue.Text = new DateTime(ticks, DateTimeKind.Utc)
-                .ToLocalTime().ToString("MMM yyyy",
-                System.Globalization.CultureInfo.GetCultureInfo("pl-PL"));
-        }
-        else TimelineValue.Text = $"{e.NewValue:0}%";
+        var y = e.GetCurrentPoint(TimelineTrack).Position.Y;
+        return Math.Clamp((y - 12) / Math.Max(1, TimelineTrack.ActualHeight - 24), 0, 1);
     }
 
-    private async void TimelineSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
+    private void TimelineTrack_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (_matchedCount < 1) return;
-        var target = (int)Math.Min(int.MaxValue, Math.Round((_matchedCount - 1) * TimelineSlider.Value / 100d));
-        await LoadPageAsync(target);
+        if (!_isReady) return;
+        RenderTimelineMarkers();
+        UpdateTimelinePosition();
+    }
+
+    private void TimelineTrack_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isReady || _matchedCount <= 0) return;
+        _timelineDragging = TimelineTrack.CapturePointer(e.Pointer);
+        if (!_timelineDragging) return;
+        _timelineDragFraction = TimelineFractionFromPointer(e);
+        TimelineBubble.Visibility = Visibility.Visible;
+        MoveTimelineThumb(_timelineDragFraction);
+        e.Handled = true;
+    }
+
+    private void TimelineTrack_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_timelineDragging) return;
+        _timelineDragFraction = TimelineFractionFromPointer(e);
+        MoveTimelineThumb(_timelineDragFraction);
+        e.Handled = true;
+    }
+
+    private async void TimelineTrack_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_timelineDragging) return;
+        _timelineDragFraction = TimelineFractionFromPointer(e);
+        _timelineDragging = false;
+        TimelineTrack.ReleasePointerCapture(e.Pointer);
+        MoveTimelineThumb(_timelineDragFraction);
+        TimelineBubble.Visibility = Visibility.Collapsed;
+        e.Handled = true;
+        await SeekTimelineAsync(_timelineDragFraction);
+    }
+
+    private void TimelineTrack_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        _timelineDragging = false;
+        TimelineBubble.Visibility = Visibility.Collapsed;
+        UpdateTimelinePosition();
+    }
+
+    private async Task SeekTimelineAsync(double fraction)
+    {
+        if (!_isReady || _matchedCount <= 0) return;
+        var ticket = ++_timelineSeekVersion;
+        _suppressScrollPaging = true;
+        _pagingBoundaryArmed = false;
+        try
+        {
+            long target;
+            if (TimelineUsesDate && _timelineMaxTicks > _timelineMinTicks)
+            {
+                var date = DateForFraction(fraction);
+                target = await _database.GetOffsetForDateAsync(date,
+                    ascending: _sortKey.EndsWith("-asc", StringComparison.Ordinal),
+                    creationDate: _sortKey.StartsWith("created", StringComparison.Ordinal),
+                    sourceId: _selectedSourceId,
+                    favoritesOnly: FavoritesOnly.IsChecked == true,
+                    search: SearchBox.Text.Trim(), folderPath: _selectedFolderPath);
+            }
+            else target = (long)Math.Round((_matchedCount - 1) * fraction);
+
+            if (ticket != _timelineSeekVersion) return;
+            await LoadPageAsync((int)Math.Min(int.MaxValue,
+                Math.Clamp(target, 0, _matchedCount - 1)));
+        }
+        catch (Exception ex)
+        {
+            OperationStatus.Text = "Błąd przejścia do daty: " + ex.Message;
+            _suppressScrollPaging = false;
+        }
     }
 
     private void SidebarGrip_PointerPressed(object sender, PointerRoutedEventArgs e)
