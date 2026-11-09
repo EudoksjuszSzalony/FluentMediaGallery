@@ -322,6 +322,36 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
+            <!-- A non-interactive skeleton appears instantly for long SQLite seeks.
+                 Actual image slots stay light gray while Shell thumbnails decode. -->
+            <Grid x:Name="GalleryLoadingOverlay" Grid.Column="0"
+                  Visibility="Collapsed" IsHitTestVisible="False"
+                  Background="#202226">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="178"/>
+                    <RowDefinition Height="178"/>
+                    <RowDefinition Height="178"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Row="0" Grid.Column="0" Background="#454A4E" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="0" Grid.Column="1" Background="#393E43" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="0" Grid.Column="2" Background="#454A4E" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="0" Grid.Column="3" Background="#393E43" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="1" Grid.Column="0" Background="#393E43" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="1" Grid.Column="1" Background="#454A4E" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="1" Grid.Column="2" Background="#393E43" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="1" Grid.Column="3" Background="#454A4E" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="2" Grid.Column="0" Background="#454A4E" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="2" Grid.Column="1" Background="#393E43" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="2" Grid.Column="2" Background="#454A4E" Margin="2" CornerRadius="4"/>
+                <Border Grid.Row="2" Grid.Column="3" Background="#393E43" Margin="2" CornerRadius="4"/>
+            </Grid>
             <!-- One Photos-style date rail; the inner list's OS scrollbar is hidden.
                  Drag/click this track for calendar seek, not for scroll position guesswork. -->
             <Grid Grid.Column="1" x:Name="TimelineTrack" Background="Transparent"
