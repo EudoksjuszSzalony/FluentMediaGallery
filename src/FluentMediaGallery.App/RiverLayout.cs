@@ -60,7 +60,7 @@ public static class RiverLayout
         var width = Math.Max(320, viewportWidth - 16);
         var ratios = new double[items.Count];
         for (var i = 0; i < ratios.Length; i++)
-            ratios[i] = GetRatio(items[i].Entry, measured);
+            ratios[i] = GetRatio(items[i].Entry, measured, probeMissing: false);
 
         for (var offset = 0; offset < items.Count;)
         {
@@ -218,12 +218,34 @@ public static class RiverLayout
         return best;
     }
 
-    private static double GetRatio(MediaEntry entry, List<MediaDimension> dimensions)
+    public static IReadOnlyList<MediaDimension> ProbeMissingDimensions(
+        IReadOnlyList<MediaRow> items, CancellationToken ct)
+    {
+        var result = new List<MediaDimension>();
+        foreach (var row in items)
+        {
+            ct.ThrowIfCancellationRequested();
+            var entry = row.Entry;
+            if (entry.Kind != MediaKind.Photo || entry.PixelWidth > 0 && entry.PixelHeight > 0)
+                continue;
+            GetRatio(entry, result, probeMissing: true);
+        }
+        return result;
+    }
+
+    private static double GetRatio(MediaEntry entry, List<MediaDimension> dimensions,
+        bool probeMissing)
     {
         if (entry.Kind == MediaKind.Video) return 16d / 9;
         if (entry.PixelWidth > 0 && entry.PixelHeight > 0)
             return Math.Clamp((double)entry.PixelWidth / entry.PixelHeight, 0.45, 4.0);
 
+        if (!probeMissing)
+        {
+            // Immediately lay out empty slots. File header probes can take
+            // seconds over SMB and must NEVER block scrolling or painting.
+            return 1.4d;
+        }
         var key = entry.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 + ":" + entry.LastWriteUtcTicks + ":" + entry.Size;
         if (Ratios.Count > 4096) Ratios.Clear();
