@@ -667,6 +667,43 @@ public sealed class LibraryDatabase
         return (long)(await cmd.ExecuteScalarAsync(ct) ?? 0L);
     }
 
+    /// <summary>
+    /// Find the absolute SQLite offset corresponding to a calendar date in
+    /// the CURRENT filtered gallery, rather than mapping calendar position
+    /// blindly to the number of indexed files.
+    /// </summary>
+    public async Task<long> GetOffsetForDateAsync(long ticks, bool ascending = false,
+        bool creationDate = false, long? sourceId = null, bool favoritesOnly = false,
+        string? search = null, string? folderPath = null,
+        CancellationToken ct = default)
+    {
+        await using var connection = await OpenAsync(ct);
+        using var cmd = connection.CreateCommand();
+        var column = creationDate
+            ? "CASE WHEN created_ticks=0 THEN modified_ticks ELSE created_ticks END"
+            : "modified_ticks";
+        var comparison = ascending ? "<" : ">";
+        cmd.CommandText = $"""
+            SELECT COUNT(*) FROM media
+            WHERE missing=0
+              AND ($source=0 OR source_id=$source)
+              AND ($folder='' OR path LIKE $folder ESCAPE '\')
+              AND ($favorites=0 OR COALESCE(favorite_override,
+                CASE WHEN rating_raw BETWEEN 63 AND 99 THEN 1 ELSE 0 END)=1)
+              AND ($search='' OR file_name LIKE $search ESCAPE '\')
+              AND {column} {comparison} $ticks;
+            """;
+        cmd.Parameters.AddWithValue("$source", sourceId.GetValueOrDefault());
+        cmd.Parameters.AddWithValue("$folder", folderPath is null ? "" :
+            EscapeLike(NormalizeFolder(folderPath).TrimEnd(Path.DirectorySeparatorChar) +
+            Path.DirectorySeparatorChar) + "%");
+        cmd.Parameters.AddWithValue("$favorites", favoritesOnly ? 1 : 0);
+        cmd.Parameters.AddWithValue("$search", string.IsNullOrWhiteSpace(search) ? ""
+            : "%" + EscapeLike(search) + "%");
+        cmd.Parameters.AddWithValue("$ticks", ticks);
+        return (long)(await cmd.ExecuteScalarAsync(ct) ?? 0L);
+    }
+
     public async Task<long> CountMediaAsync(CancellationToken ct = default)
     {
         await using var connection = await OpenAsync(ct);
