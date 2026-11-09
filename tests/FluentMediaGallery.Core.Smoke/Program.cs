@@ -224,6 +224,18 @@ try
         $"{i:0000}.jpg", MediaKind.Photo, 200 + i,
         new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).Ticks + i)).ToArray();
     await pagingDb.UpsertBatchAsync(pagingSource.Id, 1, synthetic);
+    var baseTicks = new DateTime(2025, 1, 1, 0, 0, 0,
+        DateTimeKind.Utc).Ticks;
+    Check(await pagingDb.GetOffsetForDateAsync(baseTicks + 500,
+        sourceId: pagingSource.Id) == 149,
+        "date rail seeks by real dates in descending sort");
+    Check(await pagingDb.GetOffsetForDateAsync(baseTicks + 500,
+        ascending: true, sourceId: pagingSource.Id) == 500,
+        "date rail seeks by real dates in ascending sort");
+    Check(await pagingDb.GetOffsetForDateAsync(baseTicks + 500,
+        sourceId: -999) == 0,
+        "date rail respects user-selected source scope");
+
     var head = await pagingDb.GetPageAsync(0, GalleryWindowPolicy.BatchSize);
     var tail = await pagingDb.GetPageAsync(600, GalleryWindowPolicy.BatchSize);
     Check(head.Count == 100 && head[0].Name == "0649.jpg",
