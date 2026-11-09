@@ -623,32 +623,94 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    private readonly record struct ScrollAnchor(long MediaId, double OffsetWithinBand);
+
+    private (double Height, int Columns) SquareGeometry()
+    {
+        var grid = MediaItems.ItemsPanelRoot as ItemsWrapGrid;
+        var width = grid?.ItemWidth > 0 ? grid.ItemWidth : 184d;
+        var height = grid?.ItemHeight > 0 ? grid.ItemHeight : 202d;
+        var columns = Math.Max(1, (int)Math.Floor(
+            Math.Max(width, MediaItems.ActualWidth - 16) / width));
+        return (height, columns);
+    }
+
+    private ScrollAnchor? CaptureScrollAnchor(double scrollOffset)
+    {
+        if (_rows.Count == 0) return null;
+        if (_layoutKey != "river")
+        {
+            var (height, columns) = SquareGeometry();
+            var line = (int)Math.Floor(Math.Max(0, scrollOffset) / height);
+            var index = Math.Clamp(line * columns, 0, _rows.Count - 1);
+            return new ScrollAnchor(_rows[index].Entry.Id,
+                Math.Max(0, scrollOffset - line * height));
+        }
+
+        var top = 0d;
+        foreach (var band in _riverRows)
+        {
+            var height = band.CanvasHeight + 4 +
+                (string.IsNullOrEmpty(band.Header) ? 0 : 26);
+            if (top + height >= scrollOffset && band.Tiles.Count > 0)
+                return new ScrollAnchor(band.Tiles[0].Media.Entry.Id,
+                    Math.Max(0, scrollOffset - top));
+            top += height;
+        }
+        var last = _rows[^1];
+        return new ScrollAnchor(last.Entry.Id, 0);
+    }
+
+    private double? ResolveScrollAnchor(ScrollAnchor? anchor)
+    {
+        if (anchor is null) return null;
+        if (_layoutKey != "river")
+        {
+            var index = -1;
+            for (var i = 0; i < _rows.Count; i++)
+                if (_rows[i].Entry.Id == anchor.Value.MediaId)
+                {
+                    index = i;
+                    break;
+                }
+            if (index < 0) return null;
+            var (height, columns) = SquareGeometry();
+            return index / columns * height + anchor.Value.OffsetWithinBand;
+        }
+        var top = 0d;
+        foreach (var band in _riverRows)
+        {
+            if (band.Tiles.Any(tile => tile.Media.Entry.Id == anchor.Value.MediaId))
+                return top + anchor.Value.OffsetWithinBand;
+            top += band.CanvasHeight + 4 +
+                (string.IsNullOrEmpty(band.Header) ? 0 : 26);
+        }
+        return null;
+    }
+
+    // Used only when an anchor unexpectedly disappears (for example after
+    // another concurrent filter refresh). Normal paging uses media identity.
     private double ApproximateTopHeight(int count)
     {
         if (count <= 0) return 0;
         if (_layoutKey != "river")
         {
-            var grid = MediaItems.ItemsPanelRoot as ItemsWrapGrid;
-            var itemWidth = grid?.ItemWidth > 0 ? grid.ItemWidth : 184d;
-            var itemHeight = grid?.ItemHeight > 0 ? grid.ItemHeight : 202d;
-            var columns = Math.Max(1, (int)Math.Floor(
-                Math.Max(itemWidth, MediaItems.ActualWidth - 16) / itemWidth));
-            return Math.Ceiling(count / (double)columns) * itemHeight;
+            var (height, columns) = SquareGeometry();
+            return Math.Ceiling(count / (double)columns) * height;
         }
-
-        double pixels = 0;
+        var result = 0d;
         var remaining = count;
-        foreach (var row in _riverRows)
+        foreach (var band in _riverRows)
         {
             if (remaining <= 0) break;
-            if (row.Tiles.Count == 0) continue;
-            var fraction = Math.Min(remaining, row.Tiles.Count) /
-                           (double)row.Tiles.Count;
-            pixels += fraction * (row.CanvasHeight + 4 +
-                (string.IsNullOrEmpty(row.Header) ? 0 : 26));
-            remaining -= Math.Min(remaining, row.Tiles.Count);
+            if (band.Tiles.Count == 0) continue;
+            var taken = Math.Min(remaining, band.Tiles.Count);
+            result += taken / (double)band.Tiles.Count *
+                (band.CanvasHeight + 4 +
+                 (string.IsNullOrWhiteSpace(band.Header) ? 0 : 26));
+            remaining -= taken;
         }
-        return pixels;
+        return result;
     }
 
     private async Task AppendMoreAsync()
@@ -663,6 +725,7 @@ public sealed partial class MainWindow : Window
         {
             var scroll = CurrentGalleryScroll();
             var oldOffset = scroll?.VerticalOffset ?? 0;
+            var anchor = CaptureScrollAnchor(oldOffset);
             var items = await _database.GetPageAsync(next, PageSize,
                 FavoritesOnly.IsChecked == true, SearchBox.Text.Trim(),
                 sourceId: _selectedSourceId, folderPath: _selectedFolderPath,
@@ -671,7 +734,7 @@ public sealed partial class MainWindow : Window
 
             var prune = Math.Min(_rows.Count,
                 GalleryWindowPolicy.TrimExcess(_rows.Count, items.Count));
-            var removedHeight = ApproximateTopHeight(prune);
+            var removedHeight = ApproximateTopHeight(prune); // fallback only
             foreach (var item in items) _rows.Add(new MediaRow(item));
             for (var i = 0; i < prune; i++)
             {
@@ -686,7 +749,8 @@ public sealed partial class MainWindow : Window
             UpdateGalleryProgress();
             ScheduleDimensionProbe();
             if (prune > 0)
-                RestoreGalleryScroll(oldOffset - removedHeight, version);
+                RestoreGalleryScroll(
+                    ResolveScrollAnchor(anchor) ?? (oldOffset - removedHeight), version);
         }
         catch (Exception ex)
         {
@@ -709,6 +773,7 @@ public sealed partial class MainWindow : Window
         {
             var scroll = CurrentGalleryScroll();
             var oldOffset = scroll?.VerticalOffset ?? 0;
+            var anchor = CaptureScrollAnchor(oldOffset);
             var items = await _database.GetPageAsync(previous, count,
                 FavoritesOnly.IsChecked == true, SearchBox.Text.Trim(),
                 sourceId: _selectedSourceId, folderPath: _selectedFolderPath,
@@ -733,7 +798,8 @@ public sealed partial class MainWindow : Window
             var insertedHeight = ApproximateTopHeight(items.Count);
             UpdateGalleryProgress();
             ScheduleDimensionProbe();
-            RestoreGalleryScroll(oldOffset + insertedHeight, version);
+            RestoreGalleryScroll(
+                ResolveScrollAnchor(anchor) ?? (oldOffset + insertedHeight), version);
         }
         catch (Exception ex)
         {
