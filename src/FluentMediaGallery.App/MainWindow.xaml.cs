@@ -478,8 +478,12 @@ public sealed partial class MainWindow : Window
             return (_sortKey.EndsWith("-asc", StringComparison.Ordinal) ? stars : 5 - stars) + "★";
         }
         if (_sortKey.StartsWith("favorites", StringComparison.Ordinal))
-            return fraction >= 0.5 ? "—" : "♥";
-        return fraction >= 0.5 ? "A–Z" : "Z–A";
+            return _sortKey.EndsWith("-asc", StringComparison.Ordinal)
+                ? (fraction >= 0.5 ? "♥" : "—")
+                : (fraction >= 0.5 ? "—" : "♥");
+        return _sortKey.EndsWith("-asc", StringComparison.Ordinal)
+            ? (fraction >= 0.5 ? "Z" : "A")
+            : (fraction >= 0.5 ? "A" : "Z");
     }
 
     private void UpdateTimelinePosition()
@@ -593,14 +597,16 @@ public sealed partial class MainWindow : Window
                 Mark(DateFraction(ticks), year.ToString(), isMajor);
             }
         }
-        else
+        else if (_sortKey.StartsWith("rating", StringComparison.Ordinal))
         {
             for (var i = 0; i <= 5; i++)
-                Mark(i / 5d, _sortKey.StartsWith("rating", StringComparison.Ordinal)
-                    ? (_sortKey.EndsWith("-asc", StringComparison.Ordinal)
-                        ? i : 5 - i) + "★"
-                    : i == 0 ? "A" : i == 5 ? "Z" : "", i == 0 || i == 5 ||
-                        _sortKey.StartsWith("rating", StringComparison.Ordinal));
+                Mark(i / 5d,
+                    (_sortKey.EndsWith("-asc", StringComparison.Ordinal) ? i : 5 - i) + "★", true);
+        }
+        else
+        {
+            Mark(0, TimelineLabel(0), true);
+            Mark(1, TimelineLabel(1), true);
         }
     }
 
